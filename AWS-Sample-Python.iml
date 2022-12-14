@@ -3,6 +3,7 @@
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
     <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/venv/hudi" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/venv/pysample" isTestSource="false" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.10 (AWS-Sample-Python)" jdkType="Python SDK" />

@@ -80,9 +80,10 @@ def processBatch(data_frame, batchId):
 
 
 # Script generated for node Apache Kafka
+# 需要验证 hudi delete的能力
 dataframe_ApacheKafka_node1670731139435 = glueContext.create_data_frame.from_catalog(
     database="kafka_db",
-    table_name="kafka_portfolio",
+    table_name="kafka_portfolio_json",
     additional_options={"startingOffsets": "earliest", "inferSchema": "true"},
     transformation_ctx="dataframe_ApacheKafka_node1670731139435",
 )

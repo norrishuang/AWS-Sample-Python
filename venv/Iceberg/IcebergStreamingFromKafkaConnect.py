@@ -1,7 +1,8 @@
 import sys
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
-from pyspark.context import SparkContext
+# from pyspark.context import SparkContext
+from pyspark.sql import SparkSession
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from datetime import datetime
@@ -10,18 +11,6 @@ from pyspark.sql.functions import col, from_json
 from pyspark.sql.types import StructType, StructField, StringType, LongType, IntegerType
 ## @params: [JOB_NAME]
 args = getResolvedOptions(sys.argv, ['JOB_NAME'])
-
-
-sc = SparkContext()
-glueContext = GlueContext(sc)
-spark = glueContext.spark_session
-
-job = Job(glueContext)
-job.init(args['JOB_NAME'], args)
-logger = glueContext.get_logger()
-
-logger.info("Init...")
-
 
 config = {
     "table_name": "iceberg_portfolio_kc",
@@ -34,16 +23,40 @@ config = {
     "streaming_table": "kafka_portfolio_kc"
 }
 
-spark.conf.set("spark.sql.catalog.glue_catalog", "org.apache.iceberg.spark.SparkCatalog")
-spark.conf.set("spark.sql.catalog.glue_catalog.warehouse", config['warehouse'])
-spark.conf.set("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog")
-spark.conf.set("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
-spark.conf.set("spark.sql.catalog.glue_catalog.lock-impl", "org.apache.iceberg.aws.glue.DynamoLockManager")
-spark.conf.set("spark.sql.catalog.glue_catalog.lock.table", config['dynamic_lock_table'])
+spark = SparkSession.builder \
+    .config("spark.sql.catalog.glue_catalog","org.apache.iceberg.spark.SparkCatalog") \
+    .config("spark.sql.catalog.glue_catalog.warehouse", config['warehouse']) \
+    .config("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog") \
+    .config("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO") \
+    .config("spark.sql.catalog.glue_catalog.lock-impl", "org.apache.iceberg.aws.glue.DynamoLockManager") \
+    .config("spark.sql.catalog.glue_catalog.lock.table", config['dynamic_lock_table']) \
+    .config("spark.sql.ansi.enabled", "true") \
+    .config("spark.sql.storeAssignmentPolicy", "ANSI") \
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtension").getOrCreate()
+
+glueContext = GlueContext(spark.sparkContext)
+# spark = glueContext.spark_session
+
+job = Job(glueContext)
+job.init(args['JOB_NAME'], args)
+logger = glueContext.get_logger()
+
+logger.info("Init...")
+
+
+
+
+# spark.conf.set("spark.sql.catalog.glue_catalog", "org.apache.iceberg.spark.SparkCatalog")
+# spark.conf.set("spark.sql.catalog.glue_catalog.warehouse", config['warehouse'])
+# spark.conf.set("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog")
+# spark.conf.set("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
+# spark.conf.set("spark.sql.catalog.glue_catalog.lock-impl", "org.apache.iceberg.aws.glue.DynamoLockManager")
+# spark.conf.set("spark.sql.catalog.glue_catalog.lock.table", config['dynamic_lock_table'])
+# spark.conf.set("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtension")
 
 # 处理数据转换精度问题导致的报错
-spark.conf.set("spark.sql.ansi.enabled", "true")
-spark.conf.set("spark.sql.storeAssignmentPolicy", "ANSI")
+# spark.conf.set("spark.sql.ansi.enabled", "true")
+# spark.conf.set("spark.sql.storeAssignmentPolicy", "ANSI")
 
 # S3 sink locations
 output_path = "s3://myemr-bucket-01/data/"

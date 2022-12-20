@@ -1,17 +1,8 @@
-
 import sys
-import os
-import json
-
-from pyspark.context import SparkContext
 from pyspark.sql.session import SparkSession
-from pyspark.sql.functions import concat, col, lit, to_timestamp, dense_rank, desc
-from pyspark.sql.window import Window
-
 from awsglue.utils import getResolvedOptions
 from awsglue.context import GlueContext
 from awsglue.job import Job
-from awsglue.dynamicframe import DynamicFrame
 from datetime import datetime
 import boto3
 
@@ -36,7 +27,6 @@ config = {
     "sort_key": "tstamp",
     "commits_to_retain": "4"
 }
-
 ## Generates Data
 def get_json_data(start, count, dest):
     time_stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -50,10 +40,6 @@ def create_json_df(spark, data):
 
 dest = ["Seattle", "New York", "New Jersey", "Los Angeles", "Las Vegas", "Tucson","Washington DC","Philadelphia","Miami","San Francisco"]
 df1 = create_json_df(spark, get_json_data(0, 2000000, dest))
-
-# datarows = "table rows:{0}"
-# logger.info(datarows.format(df1.count()))
-# logger.info(df1.show())
 
 additional_options={
     "hoodie.table.name": config['table_name'],

@@ -1,17 +1,15 @@
 import sys
 from datetime import datetime
-import boto3
-
-from pyspark.sql import DataFrame, Row
-from pyspark.context import SparkContext
 from pyspark.sql.session import SparkSession
-
 
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue import DynamicFrame
+from pyspark.sql.functions import col, from_json
+from pyspark.sql.types import StructType, StructField, StringType, LongType, IntegerType
+
 
 args = getResolvedOptions(sys.argv, ['JOB_NAME'])
 
@@ -32,14 +30,16 @@ config = {
     "target": "s3://myemr-bucket-01/data/hudi/hudi_portfolio_mor",
     "primary_key": "id",
     "sort_key": "id",
-    "commits_to_retain": "4"
+    "commits_to_retain": "4",
+    "streaming_db": "kafka_db",
+    "streaming_table": "kafka_portfolio_json"
 }
 
 # S3 sink locations
 output_path = "s3://myemr-bucket-01/data/"
-job_time_string = datetime.now().strftime("%Y%m%d%H%M%S")
+job_time_string = datetime.now().strftime("%Y%m%d")
 s3_target = output_path + job_time_string
-checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/"
+checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + job_time_string + "/"
 
 additional_options={
     "hoodie.table.name": config['table_name'],
@@ -62,22 +62,75 @@ additional_options={
 
 def processBatch(data_frame, batchId):
     if (data_frame.count() > 0):
-        dynamic_frame = DynamicFrame.fromDF(data_frame, glueContext, "from_data_frame")
-        outputDF = dynamic_frame.toDF()
-        # glueContext.write_dynamic_frame.from_options(frame = DynamicFrame.fromDF(outputDF, glueContext, "outputDF"),
-        #                                              connection_type = "custom.spark",
-        #                                              connection_options = additional_options)
-        outputDF.write.format(HUDI_FORMAT).options(**additional_options).mode("append").save()
+
+        logger.info("############  Source DataFrame  ############### \r\n" + getShowString(data_frame,truncate = False))
+        # logger.info("### \r\n" + getShowString(data_frame,truncate = False))
+
+        schema = StructType([
+            StructField("data", StringType(), True),
+            StructField("op", StringType(), True)
+        ])
+        data_frame.printSchema()
+        data_frame = data_frame.select(from_json(col("$json$data_infer_schema$_temporary$").cast("string"), schema).alias("data")).select(col("data.*"))
+
+        logger.info("############  Create DataFrame  ############### \r\n" + getShowString(data_frame,truncate = False))
+
+        schemaData = StructType([
+            StructField("id", IntegerType(), True),
+            StructField("reward", IntegerType(), True),
+            StructField("channels", StringType(), True),
+            StructField("difficulty", IntegerType(), True),
+            StructField("duration", IntegerType(), True),
+            StructField("offer_type", StringType(), True),
+            StructField("offer_id", StringType(), True)
+        ])
+        # 过滤 区分 insert upsert delete
+        # 这里需要有一个解套的操作，由于change_log是一个嵌套的json，需要通过字段的schema，对dataframe进行解套。
+        dataUpsert = data_frame.filter((col("op") == "+I") | (col("op") == "+U")).select(from_json(col("data").cast("string"),schemaData).alias("df")).select(col("df.*"))
+        dataDelete = data_frame.filter(col("op") == "-D").select(col("data")).select(from_json(col("data").cast("string"),schemaData).alias("df")).select(col("df.*"))
 
 
-# Script generated for node Apache Kafka
+        logger.info("############  Filter dataUpsert DataFrame  ############### \r\n" + getShowString(dataUpsert,truncate = False))
+        # database_name = config["database_name"]
+        # table_name = config["table_name"]
+        # source_table = config["streaming_table"]
+        # dataUpsertDF = df.filter(f=lambda x: x["op"] in ["+U", "+I"])
+        # dataDeleteDF = df.filter(f=lambda x: x["op"] in ["-D"])
+
+
+        if (dataUpsert.count() > 0):
+            dataUpsertDF = DynamicFrame.fromDF(dataUpsert, glueContext, "from_data_frame")
+            # dataUpsertSelect = dataUpsertDF.select_fields(paths=["data"])
+            outputUpsert = dataUpsertDF.toDF()
+            logger.info("##############   After Select Fields  ############# \r\n"
+                        + getShowString(outputUpsert,truncate = False))
+            outputUpsert.write.format(HUDI_FORMAT).options(**additional_options).mode("append").save()
+
+        if (dataDelete.count() > 0):
+            dataUpsertDF = DynamicFrame.fromDF(dataDelete, glueContext, "from_data_frame")
+            # dataDeleteSelect = dataDelete.select_fields(paths=["data"])
+            outputDelete = dataUpsertDF.toDF()
+            # outputDFDelete.show()
+            outputDelete.write.format(HUDI_FORMAT).options(**additional_options)\
+                .option("hoodie.datasource.write.operation", "delete")\
+                .mode("append").save()
+
+#{"data":{"id":6,"reward":5,"channels":"['web', 'email']","difficulty":"20","duration":"10","offer_type":"discount","offer_id":"0b1e1539f2cc45b7b9fa7c272da2e1d7"},"op":"-D"}
+
+# Script generated for node Apache Kafka  latest/earliest
 dataframe_ApacheKafka_node1670731139435 = glueContext.create_data_frame.from_catalog(
     database="kafka_db",
-    table_name="kafka_portfolio",
-    additional_options={"startingOffsets": "earliest", "inferSchema": "true"},
+    table_name="kafka_portfolio_json",
+    additional_options={"startingOffsets": "earliest", "inferSchema": "true", "classification": "json"},
     transformation_ctx="dataframe_ApacheKafka_node1670731139435",
 )
 
+
+def getShowString(df, n=10, truncate=True, vertical=False):
+    if isinstance(truncate, bool) and truncate:
+        return df._jdf.showString(n, 10, vertical)
+    else:
+        return df._jdf.showString(n, int(truncate), vertical)
 
 glueContext.forEachBatch(frame = dataframe_ApacheKafka_node1670731139435,
                          batch_function = processBatch,

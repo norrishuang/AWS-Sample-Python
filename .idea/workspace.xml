@@ -5,8 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0e4316c6-7efd-46e0-97db-aabcead60f0b" name="Changes" comment="init">
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/venv/hudi/HudiMORStreamingFromKafka.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/venv/hudi/HudiCOW.py" beforeDir="false" afterPath="$PROJECT_DIR$/venv/hudi/HudiCOW.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/venv/hudi/HudiMOR.py" beforeDir="false" afterPath="$PROJECT_DIR$/venv/hudi/HudiMOR.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/venv/hudi/HudiMORStreamingFromKafka.py" beforeDir="false" afterPath="$PROJECT_DIR$/venv/hudi/HudiMORStreamingFromKafka.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -47,7 +49,7 @@
     "project.structure.last.edited": "Project",
     "project.structure.proportion": "0.15",
     "project.structure.side.proportion": "0.28653628",
-    "settings.editor.selected.configurable": "editor.preferences.fonts.default",
+    "settings.editor.selected.configurable": "preferences.lookFeel",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
@@ -78,7 +80,10 @@
       <workItem from="1670837509980" duration="22517000" />
       <workItem from="1670978123554" duration="48000" />
       <workItem from="1670978174922" duration="351000" />
-      <workItem from="1670978529311" duration="504000" />
+      <workItem from="1670978529311" duration="6557000" />
+      <workItem from="1671160251793" duration="21367000" />
+      <workItem from="1671263706288" duration="1959000" />
+      <workItem from="1671508431338" duration="24050000" />
     </task>
     <task id="LOCAL-00001" summary="init">
       <created>1668734433010</created>
@@ -108,7 +113,35 @@
       <option name="project" value="LOCAL" />
       <updated>1670978770501</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="init">
+      <created>1670979048393</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1670979048393</updated>
+    </task>
+    <task id="LOCAL-00006" summary="init">
+      <created>1670979057326</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1670979057326</updated>
+    </task>
+    <task id="LOCAL-00007" summary="init">
+      <created>1670979146604</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1670979146604</updated>
+    </task>
+    <task id="LOCAL-00008" summary="init">
+      <created>1670979283356</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1670979283356</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

@@ -6,7 +6,6 @@ from awsglue.context import GlueContext
 from awsglue.job import Job
 from datetime import datetime
 from awsglue import DynamicFrame
-import boto3
 
 
 args = getResolvedOptions(sys.argv, ['JOB_NAME'])
@@ -65,12 +64,7 @@ additional_options={
     "path": config['target']
 }
 
-# df2.write.format(HUDI_FORMAT).options(**additional_options).mode("Overwrite").save()
 
-# glueContext.write_data_frame.from_catalog(frame = DynamicFrame.fromDF(df2, glueContext, "outputDF"),
-#                                              database = config['database_name'],
-#                                              table_name = config['table_name'],
-#                                              connection_options = additional_options)
 glueContext.write_dynamic_frame.from_options(frame = DynamicFrame.fromDF(df2, glueContext, "outputDF"),
                                              connection_type = "s3",
                                              connection_options = additional_options)

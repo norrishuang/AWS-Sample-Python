@@ -1,8 +1,8 @@
 import sys
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
-# from pyspark.context import SparkContext
-from pyspark.sql import SparkSession
+from pyspark.sql.session import SparkSession
+from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from datetime import datetime
@@ -16,12 +16,11 @@ config = {
     "table_name": "iceberg_portfolio_kc",
     "database_name": "iceberg_db",
     "warehouse": "s3://myemr-bucket-01/data/iceberg-folder/",
-    "primary_key": "id",
-    "sort_key": "id",
     "dynamic_lock_table": "datacoding_iceberg_lock_table",
     "streaming_db": "kafka_db",
-    "streaming_table": "kafka_portfolio_kc"
+    "streaming_table": "kafka_portfolio_08"
 }
+
 
 spark = SparkSession.builder \
     .config("spark.sql.catalog.glue_catalog","org.apache.iceberg.spark.SparkCatalog") \
@@ -29,38 +28,41 @@ spark = SparkSession.builder \
     .config("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog") \
     .config("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO") \
     .config("spark.sql.catalog.glue_catalog.lock-impl", "org.apache.iceberg.aws.glue.DynamoLockManager") \
-    .config("spark.sql.catalog.glue_catalog.lock.table", config['dynamic_lock_table']) \
+    .config("spark.sql.catalog.glue_catalog.lock.table", "datacoding_iceberg_lock_table") \
     .config("spark.sql.ansi.enabled", "true") \
     .config("spark.sql.storeAssignmentPolicy", "ANSI") \
-    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtension").getOrCreate()
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions").getOrCreate()
+
+# .config("spark.sql.catalog.glue_catalog.lock-impl", "org.apache.iceberg.aws.glue.DynamoLockManager") \
+# .config("spark.sql.catalog.glue_catalog.lock.table", config['dynamic_lock_table']) \
+
 
 glueContext = GlueContext(spark.sparkContext)
+#
+# sc = SparkContext()
+# glueContext = GlueContext(sc)
 # spark = glueContext.spark_session
-
-job = Job(glueContext)
-job.init(args['JOB_NAME'], args)
-logger = glueContext.get_logger()
-
-logger.info("Init...")
-
-
-
-
+#
 # spark.conf.set("spark.sql.catalog.glue_catalog", "org.apache.iceberg.spark.SparkCatalog")
 # spark.conf.set("spark.sql.catalog.glue_catalog.warehouse", config['warehouse'])
 # spark.conf.set("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog")
 # spark.conf.set("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
+# spark.conf.set("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
 # spark.conf.set("spark.sql.catalog.glue_catalog.lock-impl", "org.apache.iceberg.aws.glue.DynamoLockManager")
-# spark.conf.set("spark.sql.catalog.glue_catalog.lock.table", config['dynamic_lock_table'])
-# spark.conf.set("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtension")
+# spark.conf.set("spark.sql.catalog.glue_catalog.lock.table", "datacoding_iceberg_lock_table")
 
-# 处理数据转换精度问题导致的报错
+job = Job(glueContext)
+job.init(args['JOB_NAME'], args)
+# # 处理数据转换精度问题导致的报错
 # spark.conf.set("spark.sql.ansi.enabled", "true")
 # spark.conf.set("spark.sql.storeAssignmentPolicy", "ANSI")
+logger=glueContext.get_logger()
+
+logger.info("Init...")
 
 # S3 sink locations
 output_path = "s3://myemr-bucket-01/data/"
-job_time_string = datetime.now().strftime("%Y%m%d%H%M%S")
+job_time_string = datetime.now().strftime("%Y%m%d%")
 s3_target = output_path + job_time_string
 checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + job_time_string + "/"
 
@@ -128,20 +130,19 @@ def processBatch(data_frame, batchId):
             # WHEN MATCHED THEN UPDATE
             #     SET *
             # WHEN NOT MATCHED THEN INSERT * """
-            logger.info("**** execute sql:" + query)
-
-            query1 = f"""select count(1) from glue_catalog.{database_name}.{table_name}"""
-
-            logger.info("**** execute sql1:" + query1)
-            spark.sql(query1)
-
-        if(dataDelete.count() > 0):
-            dataUpsertDF = DynamicFrame.fromDF(dataDelete, glueContext, "from_data_frame")
-            outputDelete = dataUpsertDF.toDF()
-            outputDelete.createOrReplaceTempView("tmp_" + source_table + "_delete")
-            query = f"""DELETE glue_catalog.{database_name}.{table_name} AS t1 where EXISTS (SELECT ID FROM tmp_{source_table}_delete WHERE t1.ID = ID)"""
-            # {"data":{"id":1,"reward":10,"channels":"['email', 'mobile', 'social']","difficulty":"10","duration":"7","offer_type":"bogo","offer_id":"ae264e3637204a6fb9bb56bc8210ddfd"},"op":"+I"}
-            spark.sql(query)
+            print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+            print(spark.conf.get("spark.sql.catalog.glue_catalog"))
+            print("###############################################")
+            # outputUpsert.write.format("iceberg").mode("append").save(f"""glue_catalog.{database_name}.{table_name}""")
+            outputUpsert.writeTo(f"""glue_catalog.{database_name}.{table_name}""").createOrReplace()
+            # spark.sql(query)
+        # if(dataDelete.count() > 0):
+        #     dataDeleteDF = DynamicFrame.fromDF(dataDelete, glueContext, "from_data_frame")
+        #     outputDelete = dataDeleteDF.toDF()
+        #     outputDelete.createOrReplaceTempView("tmp_" + source_table + "_delete")
+        #     query = f"""DELETE glue_catalog.{database_name}.{table_name} AS t1 where EXISTS (SELECT ID FROM tmp_{source_table}_delete WHERE t1.ID = ID)"""
+        #     # {"data":{"id":1,"reward":10,"channels":"['email', 'mobile', 'social']","difficulty":"10","duration":"7","offer_type":"bogo","offer_id":"ae264e3637204a6fb9bb56bc8210ddfd"},"op":"+I"}
+        #     spark.sql(query)
 
 
 # Script generated for node Apache Kafka

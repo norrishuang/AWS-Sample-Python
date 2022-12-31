@@ -160,8 +160,10 @@ def processBatch(data_frame):
             # rowjson = dataUpsert.select('after').first()
             rowjson = dataUpsert.select('after').collect()[dataUpsert.count()-1]
             schemaData = spark.read.json(sc.parallelize([rowjson[0]])).schema
+            #
+            # #########考虑实现 schema 自适应，如果发现新的字段，直接创建（考虑，不做自动创建，通过单独的topic独立处理） ##########
+            # OldTable = spark.table(f"""glue_catalog.{database_name}.{table_name} """)
 
-            #########考虑实现 schema 自适应，如果发现新的字段，直接创建 ##########
 
             dataUpsert = dataUpsert.select(from_json(col("after").cast("string"),schemaData).alias("DFADD")).select(col("DFADD.*"))
             logger.info("############  Auto Schema Recognize  ############### \r\n" + getShowString(dataUpsert,truncate = False))

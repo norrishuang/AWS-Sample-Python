@@ -35,12 +35,11 @@ spark.conf.set("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceber
 spark.conf.set("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
 spark.conf.set("spark.sql.catalog.glue_catalog.lock-impl", "org.apache.iceberg.aws.glue.DynamoLockManager")
 spark.conf.set("spark.sql.catalog.glue_catalog.lock.table", "datacoding_iceberg_lock_table")
+spark.conf.set("spark.sql.defaultCatalog", "glue_catalog")
 
 # 处理数据转换精度问题导致的报错
 spark.conf.set("spark.sql.ansi.enabled", "true")
 spark.conf.set("spark.sql.storeAssignmentPolicy", "ANSI")
-
-
 
 # S3 sink locations
 output_path = "s3://myemr-bucket-01/data/"

@@ -7,20 +7,16 @@ from awsglue.context import GlueContext
 from awsglue.job import Job
 from datetime import datetime
 from awsglue import DynamicFrame
-from pyspark.sql.functions import col, from_json
+from pyspark.sql.functions import col, from_json, schema_of_json,current_timestamp
 from pyspark.sql.types import StructType, StructField, StringType, LongType, IntegerType
 
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 config = {
-    "table_name": "iceberg_portfolio_10",
     "database_name": "iceberg_db",
     "warehouse": "s3://myemr-bucket-01/data/iceberg-folder/",
-    "primary_key": "id",
-    "sort_key": "id",
     "dynamic_lock_table": "datacoding_iceberg_lock_table",
     "streaming_db": "kafka_db",
-    "streaming_table": "kafka_user_order",
-    "kafka.topics": "demodb10.demo.portfolio"
+    "streaming_table": "kafka_user_order"
 }
 
 #源表对应iceberg目标表（多表处理）
@@ -28,25 +24,19 @@ tableIndexs = {
     "portfolio": "iceberg_portfolio_10",
     "table02": "table02",
     "table01": "table01",
-    "user_order": "user_order"
+    "user_order": "user_order_main",
+    "tb_schema_evolution": "tb_schema_evolution"
 }
-
-
-
 
 spark = SparkSession.builder \
     .config("spark.sql.catalog.glue_catalog","org.apache.iceberg.spark.SparkCatalog") \
     .config("spark.sql.catalog.glue_catalog.warehouse", config['warehouse']) \
     .config("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog") \
     .config("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO") \
-    .config("spark.sql.ansi.enabled", "true") \
+    .config("spark.sql.ansi.enabled", "false") \
     .config("spark.sql.storeAssignmentPolicy", "ANSI") \
     .config("spark.sql.iceberg.handle-timestamp-without-timezone", "true") \
     .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions").getOrCreate()
-
-# sc = SparkContext()
-# glueContext = GlueContext(sc)
-# spark = glueContext.spark_session
 
 glueContext = GlueContext(spark.sparkContext)
 sc = spark.sparkContext
@@ -57,18 +47,8 @@ job.init(args["JOB_NAME"], args)
 
 logger=glueContext.get_logger()
 
-# spark.conf.set("spark.sql.catalog.glue_catalog", "org.apache.iceberg.spark.SparkCatalog")
-# spark.conf.set("spark.sql.catalog.glue_catalog.warehouse", "s3://myemr-bucket-01/data/iceberg-folder/")
-# spark.conf.set("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog")
-# spark.conf.set("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
-# spark.conf.set("spark.sql.catalog.glue_catalog.lock-impl", "org.apache.iceberg.aws.glue.DynamoLockManager")
-# spark.conf.set("spark.sql.catalog.glue_catalog.lock.table", "datacoding_iceberg_lock_table")
-
 # S3 sink locations
-output_path = "s3://myemr-bucket-01/data/"
-job_time_string = datetime.now().strftime("%Y%m%d%")
-s3_target = output_path + job_time_string
-checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + job_time_string + "/"
+checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/"
 
 # 把 dataframe 转换成字符串，在logger中输出
 def getShowString(df, n=10, truncate=True, vertical=False):
@@ -88,26 +68,15 @@ SourceDF = glueContext.create_data_frame_from_options(
     format="csv",
     connection_options={
         "paths": [
-            "s3://cdc-target-812046859005-us-east-1/topics/norrisdb.norrisdb.user_order/"
+            "s3://cdc-target-812046859005-us-east-1/topics/"
         ],
         "recurse": True,
     },
     transformation_ctx="SourceDF",
 )
 
-
-logger.info("############  Source DataFrame  ############### \r\n" + getShowString(SourceDF, truncate = False))
-
 def processBatch(data_frame):
     if (data_frame.count() > 0):
-        #dynamicDF转成DF（直接转换会丢失json的数据结构）
-        # data_frame = data_frame.toDF()
-
-        # database_name = config["database_name"]
-        # table_name = config["table_name"]
-        # source_table = config["streaming_table"]
-
-        logger.info("############  Source Batch Process DataFrame  ############### \r\n" + getShowString(data_frame,truncate = False))
 
         schema = StructType([
             StructField("before", StringType(), True),
@@ -118,88 +87,117 @@ def processBatch(data_frame):
             StructField("transaction", StringType(), True)
         ])
 
+        dataJsonDF = data_frame.select(from_json(col("col0").cast("string"), schema).alias("data")).select(col("data.*"))
+        # logger.info("############  Create DataFrame  ############### \r\n" + getShowString(dataJsonDF,truncate = False))
 
-
-
-        data_frame = data_frame.select(from_json(col("col0").cast("string"), schema).alias("data")).select(col("data.*"))
-        logger.info("############  Create DataFrame  ############### \r\n" + getShowString(data_frame,truncate = False))
-
-
-
+        dataInsert = dataJsonDF.filter("op in ('c','r') and after is not null")
         # 过滤 区分 insert upsert delete
-        # 这里需要有一个解套的操作，由于change_log是一个嵌套的json，需要通过字段的schema，对dataframe进行解套。
-        dataUpsert = data_frame.filter("op in ('c','r','u') and after is not null")
+        dataUpsert = dataJsonDF.filter("op in ('u') and after is not null")
 
-        # dataDelete = data_frame.filter("op in ('d') and before is not null") \
-        dataDelete = data_frame.filter("op in ('d') and before is not null")
+        dataDelete = dataJsonDF.filter("op in ('d') and before is not null")
 
-        if(dataUpsert.count() > 0):
-            #根据DataFrame自动生成schema，需要对发生DDL（add/drop column 时做出响应）
-            #获取一个DF的最后一行作为schema的基准
+        if(dataInsert.count() > 0):
             #### 分离一个topics多表的问题。
-
-            sourceJson = dataUpsert.select('source').first()
-            schemaSource = spark.read.json(sc.parallelize([sourceJson[0]])).schema
+            sourceJson = dataInsert.select('source').first()
+            schemaSource = schema_of_json(sourceJson[0])
 
             # 获取多表
-            dataTables = dataUpsert.select(from_json(col("source").cast("string"),schemaSource).alias("SOURCE"))\
+            dataTables = dataInsert.select(from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
                 .select(col("SOURCE.db"),col("SOURCE.table")).distinct()
-            logger.info("############  MutiTables  ############### \r\n" + getShowString(dataTables,truncate = False))
+            # logger.info("############  MutiTables  ############### \r\n" + getShowString(dataTables,truncate = False))
             rowTables = dataTables.collect()
 
             for cols in rowTables :
                 tableName = cols[1]
-                dataDF = dataUpsert.select(col("after"),\
-                    from_json(col("source").cast("string"),schemaSource).alias("SOURCE"))\
+                dataDF = dataInsert.select(col("after"), \
+                                           from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
                     .filter("SOURCE.table = '" + tableName + "'")
-                dataJson = dataDF.select('after').collect()[dataDF.count()-1]
-                schemaData = spark.read.json(sc.parallelize([dataJson[0]])).schema
+                dataJson = dataDF.select('after').first()
+                schemaData = schema_of_json(dataJson[0])
+                logger.info("############  Insert Into-GetSchema-FirstRow:" + dataJson[0])
 
-                database_name = config["database_name"]
-                table_name = tableIndexs[tableName]
-                # schemaTable = spark.table(f"""glue_catalog.{database_name}.{table_name}""").schema
+                dataDFOutput = dataDF.select(from_json(col("after").cast("string"),schemaData).alias("DFADD")).select(col("DFADD.*"), current_timestamp().alias("ts"))
+                logger.info("############  INSERT INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
+                InsertDataLake(tableName, dataDFOutput)
 
-                dataDFOutput = dataDF.select(from_json(col("after").cast("string"),schemaData).alias("DFADD")).select(col("DFADD.*"))
-                logger.info("############  MERGE INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
-                InputDataLake(tableName, dataDFOutput)
+        if(dataUpsert.count() > 0):
+            #### 分离一个topics多表的问题。
+            sourceJson = dataUpsert.select('source').first()
+            schemaSource = schema_of_json(sourceJson[0])
+
+            # 获取多表
+            dataTables = dataUpsert.select(from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
+                .select(col("SOURCE.db"),col("SOURCE.table")).distinct()
+            # logger.info("############  MutiTables  ############### \r\n" + getShowString(dataTables,truncate = False))
+            rowTables = dataTables.collect()
+
+            for cols in rowTables :
+                tableName = cols[1]
+                dataDF = dataUpsert.select(col("after"), \
+                                           from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
+                    .filter("SOURCE.table = '" + tableName + "'")
+                dataJson = dataDF.select('after').first()
+                schemaData = schema_of_json(dataJson[0])
+
+                dataDFOutput = dataDF.select(from_json(col("after").cast("string"),schemaData).alias("DFADD")).select(col("DFADD.*"), current_timestamp().alias("ts"))
+                # logger.info("############  MERGE INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
+                MergeIntoDataLake(tableName, dataDFOutput)
 
 
         if(dataDelete.count() > 0):
-            rowjson = dataDelete.select('before').collect()[dataUpsert.count()-1]
+            sourceJson = dataUpsert.select('source').first()
+            # schemaData = schema_of_json([rowjson[0]])
 
-            schemaSource = spark.read.json(sc.parallelize([sourceJson[0]])).schema
-
+            schemaSource = schema_of_json(sourceJson[0])
             dataTables = dataDelete.select(from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
                 .select(col("SOURCE.db"),col("SOURCE.table")).distinct()
 
-            logger.info("############  Auto Schema Recognize  ############### \r\n" + getShowString(dataDelete,truncate = False))
+            # logger.info("############  Auto Schema Recognize  ############### \r\n" + getShowString(dataDelete,truncate = False))
 
             rowTables = dataTables.collect()
             for cols in rowTables :
                 tableName = cols[1]
                 dataDF = dataDelete.select(col("before"), \
-                    from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
+                                           from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
                     .filter("SOURCE.table = '" + tableName + "'")
-                dataJson = dataDF.select('before').collect()[dataDF.count()-1]
-                schemaData = spark.read.json(sc.parallelize([dataJson[0]])).schema
+                dataJson = dataDF.select('before').first()
+
+                schemaData = schema_of_json(dataJson[0])
                 dataDFOutput = dataDF.select(from_json(col("before").cast("string"),schemaData).alias("DFDEL")).select(col("DFDEL.*"))
                 logger.info("############  DELETE FROM  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
                 DeleteDataFromDataLake(tableName,dataDFOutput)
 
+def InsertDataLake(tableName,dataFrame):
 
-def InputDataLake(tableName,dataFrame):
-    # dataUpsertDF = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame")
-    # outputUpsert = dataUpsertDF.toDF()
     logger.info("##############  Func:InputDataLake [ "+ tableName +  "] ############# \r\n"
                 + getShowString(dataFrame,truncate = False))
 
     database_name = config["database_name"]
     table_name = tableIndexs[tableName]
+    dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
+    # TempTable = "tmp_" + tableName + "_insert"
+    # dyDataFrame.createOrReplaceTempView(TempTable)
+
+    # dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
+    dyDataFrame.writeTo(f"glue_catalog.{database_name}.{table_name}")\
+        .option("merge-schema", "true")\
+        .option("check-ordering","false").append()
+    # query = f"""INSERT INTO glue_catalog.{database_name}.{table_name}  SELECT * FROM {TempTable}"""
+    # logger.info("####### Execute SQL:" + query)
+    # spark.sql(query)
+def MergeIntoDataLake(tableName,dataFrame):
+
+    logger.info("##############  Func:MergeIntoDataLake [ "+ tableName +  "] ############# \r\n"
+                + getShowString(dataFrame,truncate = False))
+
+    database_name = config["database_name"]
+    table_name = tableIndexs[tableName]
+    dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
 
     TempTable = "tmp_" + tableName + "_upsert"
-    dataFrame.createOrReplaceTempView(TempTable)
-    # query = f"""INSERT INTO glue_catalog.{database_name}.{table_name}  SELECT * FROM {TempTable}"""
-    query = f"""MERGE INTO glue_catalog.{database_name}.{table_name} t USING (SELECT *,current_timestamp() as ts FROM {TempTable}) u ON t.ID = u.ID
+    dyDataFrame.createOrReplaceTempView(TempTable)
+
+    query = f"""MERGE INTO glue_catalog.{database_name}.{table_name} t USING (SELECT * FROM {TempTable}) u ON t.ID = u.ID
             WHEN MATCHED THEN UPDATE
                 SET *
             WHEN NOT MATCHED THEN INSERT * """
@@ -209,8 +207,8 @@ def InputDataLake(tableName,dataFrame):
 def DeleteDataFromDataLake(tableName,dataFrame):
     database_name = config["database_name"]
     table_name = tableIndexs[tableName]
-
-    dataFrame.createOrReplaceTempView("tmp_" + tableName + "_delete")
+    dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
+    dyDataFrame.createOrReplaceTempView("tmp_" + tableName + "_delete")
     query = f"""DELETE FROM glue_catalog.{database_name}.{table_name} AS t1 where EXISTS (SELECT ID FROM tmp_{tableName}_delete WHERE t1.ID = ID)"""
     # {"data":{"id":1,"reward":10,"channels":"['email', 'mobile', 'social']","difficulty":"10","duration":"7","offer_type":"bogo","offer_id":"ae264e3637204a6fb9bb56bc8210ddfd"},"op":"+I"}
     spark.sql(query)

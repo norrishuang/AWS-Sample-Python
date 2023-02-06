@@ -2,7 +2,6 @@ import sys
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
 from pyspark.sql.session import SparkSession
-from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 
 from awsglue.job import Job
@@ -19,15 +18,19 @@ config = {
     "warehouse": "s3://myemr-bucket-01/data/iceberg-folder/",
     "dynamic_lock_table": "datacoding_iceberg_lock_table",
     "streaming_db": "kafka_db",
-    "streaming_table": "kafka_user_order_server02"
+    "streaming_table": "kafka_portfolio_topics"
 }
 
 #源表对应iceberg目标表（多表处理）
 tableIndexs = {
     "portfolio": "iceberg_portfolio_10",
+    "portfolio_01": "portfolio_01",
     "table02": "table02",
     "table01": "table01",
-    "user_order": "user_order_main",
+    "user_order_list_small_file": "user_order_list_small_file",
+    "user_order_list": "user_order_list",
+    "user_order_main": "user_order_main",
+    "user_order_mor": "user_order_mor",
     "tb_schema_evolution": "tb_schema_evolution"
 }
 
@@ -72,7 +75,7 @@ logger.info("Init...")
 output_path = "s3://myemr-bucket-01/data/"
 job_time_string = datetime.now().strftime("%Y%m%d%")
 s3_target = output_path + job_time_string
-checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "checkpoint-05" + "/"
+checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "checkpoint-06" + "/"
 
 additional_options = {}
 # 把 dataframe 转换成字符串，在logger中输出
@@ -84,29 +87,6 @@ def getShowString(df, n=10, truncate=True, vertical=False):
 
 def processBatch(data_frame,batchId):
     if (data_frame.count() > 0):
-        # dataJsonDF = DynamicFrame.fromDF(data_frame, glueContext, "from_data_frame").apply_mapping(
-        #     [
-        #         ("before", "String", "before", "String"),
-        #         ("after", "String", "after", "String"),
-        #         ("source", "String", "source", "String"),
-        #         ("op", "String", "op", "String"),
-        #         ("ts_ms", "Long", "ts_ms", "Long"),
-        #         ("transaction", "String", "transaction", "String")
-        #     ]
-        # )
-
-        # dataJsonDF = data_frame.select(from_json(col("$json$data_infer_schema$_temporary$").cast("string"), schema).alias("data")).select(col("data.*"))
-        # logger.info("############  Create DataFrame  ############### \r\n" + getShowString(dataJsonDF,truncate = False))
-        # logger.info("############  Create DataFrame  ############### \r\n")
-        # # dataJsonDF.show(truncate = False)
-        # # dataInsertDYF = dataJsonDF.filter("op in ('c','r') and after is not null")
-        # dataInsertDYF = dataJsonDF.filter(f=lambda x: x["op"] in ["c", "r"])
-        # # 过滤 区分 insert upsert delete
-        # # dataUpsertDYF = dataJsonDF.filter("op in ('u') and after is not null")
-        # dataUpsertDYF = dataJsonDF.filter(f=lambda x: x["op"] in ["u"])
-        #
-        # # dataDeleteDYF = dataJsonDF.filter("op in ('d') and before is not null")
-        # dataDeleteDYF = dataJsonDF.filter(f=lambda x: x["op"] in ["d"])
         schema = StructType([
             StructField("before", StringType(), True),
             StructField("after", StringType(), True),
@@ -117,24 +97,20 @@ def processBatch(data_frame,batchId):
         ])
 
         dataJsonDF = data_frame.select(from_json(col("$json$data_infer_schema$_temporary$").cast("string"), schema).alias("data")).select(col("data.*"))
-        # logger.info("############  Create DataFrame  ############### \r\n" + getShowString(dataJsonDF,truncate = False))
 
         dataInsert = dataJsonDF.filter("op in ('c','r') and after is not null")
-        # 过滤 区分 insert upsert delete
+
         dataUpsert = dataJsonDF.filter("op in ('u') and after is not null")
 
         dataDelete = dataJsonDF.filter("op in ('d') and before is not null")
 
         if(dataInsert.count() > 0):
-            #### 分离一个topics多表的问题。
-            # dataInsert = dataInsertDYF.toDF()
             sourceJson = dataInsert.select('source').first()
             schemaSource = schema_of_json(sourceJson[0])
 
-            # 获取多表
+            # MutiTable
             dataTables = dataInsert.select(from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
                 .select(col("SOURCE.db"),col("SOURCE.table")).distinct()
-            # logger.info("############  MutiTables  ############### \r\n" + getShowString(dataTables,truncate = False))
             rowTables = dataTables.collect()
 
             for cols in rowTables :
@@ -147,19 +123,15 @@ def processBatch(data_frame,batchId):
                 logger.info("############  Insert Into-GetSchema-FirstRow:" + dataJson[0])
 
                 dataDFOutput = dataDF.select(from_json(col("after").cast("string"),schemaData).alias("DFADD")).select(col("DFADD.*"), current_timestamp().alias("ts"))
-                # logger.info("############  INSERT INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
                 InsertDataLake(tableName, dataDFOutput)
 
         if(dataUpsert.count() > 0):
-            #### 分离一个topics多表的问题。
-            # dataUpsert = dataUpsertDYF.toDF()
             sourceJson = dataUpsert.select('source').first()
             schemaSource = schema_of_json(sourceJson[0])
 
             # 获取多表
             dataTables = dataUpsert.select(from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
                 .select(col("SOURCE.db"),col("SOURCE.table")).distinct()
-            # logger.info("############  MutiTables  ############### \r\n" + getShowString(dataTables,truncate = False))
             rowTables = dataTables.collect()
 
             for cols in rowTables :
@@ -172,8 +144,6 @@ def processBatch(data_frame,batchId):
                 database_name = config["database_name"]
                 table_name = tableIndexs[tableName]
                 schemaData = spark.table(f"glue_catalog.{database_name}.{table_name}").schema
-                # dataJson = dataDF.select('after').first()
-                # schemaData = schema_of_json(dataJson[0])
 
                 dataDFOutput = dataDF.select(from_json(col("after").cast("string"),schemaData).alias("DFADD")).select(col("DFADD.*"), current_timestamp().alias("ts"))
                 logger.info("############  MERGE INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
@@ -257,7 +227,7 @@ glueContext.forEachBatch(frame = dataframe_ApacheKafka_node1670731139435,
                          options = {
                              "windowSize": "30 seconds",
                              "checkpointLocation": checkpoint_location,
-                             "batchMaxRetries": 0
+                             "batchMaxRetries": 1
                          })
 
 job.commit()

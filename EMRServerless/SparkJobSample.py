@@ -16,6 +16,7 @@ if __name__ == "__main__":
         sys.exit(0)
     vSQLFile = ''
     vS3Bucket = ''
+
     logger = logging.getLogger('py4j')
 
     opts,args = getopt.getopt(sys.argv[1:],"f:s:h:",["sqlfile=","s3bucket=","hivevar="])
@@ -28,8 +29,8 @@ if __name__ == "__main__":
             logger.info("S3Bucket:" + vS3Bucket)
         elif opt_name in ('-h','--hivevar'):
             hivevar = opt_value
-            exec(hivevar)
-            strhivevar = 'hivevar:' + hivevar
+            exec("'"+hivevar+"'")
+            strhivevar = "'hivevar:" + hivevar + "'"
             exec(strhivevar)
             logger.info(strhivevar)
         else:

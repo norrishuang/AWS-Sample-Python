@@ -18,10 +18,17 @@ logger = logging.getLogger('py4j')
 if __name__ == '__main__':
 
     if (len(sys.argv) == 0):
-        print("Usage: spark-etl-job [-d jdbcdriver,-l jdbcurl,-u user,-p password,-d database,-t tablename,-s s3path]")
+        print("Usage: spark-etl-job [-j jdbcdriver,-l jdbcurl,-u user,-p password,-d database,-t tablename,-s s3path]")
         sys.exit(0)
+
+    #default
+    vWriteMode = "append"
+    vJDBCDriver = ""
+    vJDBCUrl = ""
+    vUser = ""
     # 传参
-    opts,args = getopt.getopt(sys.argv[1:],"f:s:h:",["sqlfile=","s3bucket=","hivevar="])
+    opts,args = getopt.getopt(sys.argv[1:],"j:l:u:p:d:t:s:ao",\
+                              ["jdbcdriver=","jdbcurl=","user=","password=","database=","tablename=","s3path=","append","overwrite"])
     for opt_name,opt_value in opts:
         if opt_name in ('-j','--jdbcdriver'):
             vJDBCDriver = opt_value
@@ -39,12 +46,28 @@ if __name__ == '__main__':
             vTablename = opt_value
         elif opt_name in ('-s','--s3path'):
             vS3Path = opt_value
+        elif opt_name in ('-a','--append'):
+            vWriteMode = 'append'
+        elif opt_name in ('-o','--overwrite'):
+            vWriteMode = 'append'
         else:
             logger.info("need parameters [jdbcdriver,jdbcurl,user,password,database,tablename,s3path]")
             exit()
 
+    if vJDBCDriver == "" :
+        logger.info("need parameters [JDBCDriver]")
+        exit()
+
+    if vJDBCUrl == "" :
+        logger.info("need parameters [JDBCUrl]")
+        exit()
+
     # 构建SparkSession执行环境入口对象
-    spark = SparkSession.builder.appName("SparkETL").master("local[*]").getOrCreate()
+    spark = SparkSession \
+        .builder \
+        .appName("SparkETL") \
+        .enableHiveSupport() \
+        .getOrCreate()
     # config("spark.driver.extraClassPath", "/export/project/02_SQL/database/sqljdbc_10.2/chs/mssql-jdbc-10.2.1.jre8.jar").\
 
 
@@ -59,6 +82,6 @@ if __name__ == '__main__':
         load()
 
     # write s3
-    dfTable.write.mode("overwrite").option("partitionOverwriteMode", "dynamic").parquet(vS3Path)
+    dfTable.write.mode(vWriteMode).option("partitionOverwriteMode", "dynamic").parquet(vS3Path)
 
 

@@ -17,27 +17,28 @@ if __name__ == "__main__":
     vSQLFile = ''
     vS3Bucket = ''
 
-    logger = logging.getLogger('py4j')
+    logger = logging.getLogger()
 
     opts,args = getopt.getopt(sys.argv[1:],"f:s:h:",["sqlfile=","s3bucket=","hivevar="])
     for opt_name,opt_value in opts:
         if opt_name in ('-f','--sqlfile'):
             vSQLFile = opt_value
             logger.info("SQLFile:" + vSQLFile)
+            print("SQLFile:" + vSQLFile)
         elif opt_name in ('-s','--s3bucket'):
             vS3Bucket = opt_value
             logger.info("S3Bucket:" + vS3Bucket)
+            print("S3Bucket:" + vS3Bucket)
         elif opt_name in ('-h','--hivevar'):
             hivevar = opt_value
-            exec("'"+hivevar+"'")
-            strhivevar = "'hivevar:" + hivevar + "'"
-            exec(strhivevar)
-            logger.info(strhivevar)
+            exec(hivevar)
+            print("hivevar:" + hivevar)
         else:
             logger.info("need parameters [sqlfile,s3bucket,hivevar]")
             exit()
     vWarehouse = "s3://" + vS3Bucket + "/warehouse/"
     logger.info("SQL File: " + vSQLFile)
+    print("SQL File: " + vSQLFile)
     logger.info("Warehouse location: " + vWarehouse)
 
     spark = SparkSession \
@@ -51,10 +52,10 @@ if __name__ == "__main__":
     vSqlContext = rdd.collect()[0][1]
 
     #处理换行符
-    rSql = vSqlContext.replace('\n', '')
+    # rSql = vSqlContext.replace('\n', '')
     # rSql = vSqlContext
     #按分号拆分sql
-    sqlList = rSql.split(";",)
+    sqlList = vSqlContext.split(";",)
 
     # 处理 Hive SQL兼容性
     hiveSQLCompat = "set spark.sql.hive.convertMetastoreParquet = true"
@@ -65,4 +66,5 @@ if __name__ == "__main__":
     for sql in sqlList:
         if sql != '':
             logger.info("execsql:" + sql)
+            print("execsql:" + sql)
             spark.sql(sql.format_map(vars()))

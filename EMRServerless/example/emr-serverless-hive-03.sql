@@ -11,9 +11,13 @@ create table hivemetastore.ods_uber_data_hour_13 as select concat(year,"-",lpad(
 drop table if exists hivemetastore.ods_uber_data_hour_test;
 create table hivemetastore.ods_uber_data_hour_test as select concat(year,"-",lpad(month,2,0),"-",lpad(day,2,0)) pardate,hour,count(*) as cnt
  from hivemetastore.uber_movement_nyc where hour = {HOUR} group by year,month,day,hour;
-
+----hahaha
+----sss
 drop table if exists dwd_uber_data_hour;
 create table dwd_uber_data_hour as select * from hivemetastore.ods_uber_data_hour_11 where pardate = '{DT}' 
 union select * from hivemetastore.ods_uber_data_hour_12 where pardate = '{DT}'
 union select * from hivemetastore.ods_uber_data_hour_13 where pardate = '{DT}'
 union select * from hivemetastore.ods_uber_data_hour_test where pardate = '{DT}';
+
+insert overwrite table dwd_uber_data_hour select * from hivemetastore.ods_uber_data_hour_11 where pardate = '{DT}'
+                                   union select * from hivemetastore.ods_uber_data_hour_12 where pardate = '{DT}';

@@ -52,10 +52,15 @@ if __name__ == "__main__":
 
     #处理换行符
     rSql = vSqlContext.replace('\n', '')
-
+    # rSql = vSqlContext
     #按分号拆分sql
     sqlList = rSql.split(";",)
 
+    # 处理 Hive SQL兼容性
+    hiveSQLCompat = "set spark.sql.hive.convertMetastoreParquet = true"
+    spark.sql(hiveSQLCompat)
+    hiveSQLCompat = "set spark.sql.ansi.enabled = false"
+    spark.sql(hiveSQLCompat)
     #遍历 sqlList 执行, 需要从变量域中获取变量 format_map(vars())，因此sql中定义的变量格式 {parameter}
     for sql in sqlList:
         if sql != '':

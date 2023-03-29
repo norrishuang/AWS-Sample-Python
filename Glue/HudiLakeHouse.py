@@ -94,6 +94,8 @@ def processBatch(data_frame, batchId):
         schemaSource = StructType([
             StructField("id", IntegerType(), True),
             StructField("uuid", StringType(), True),
+            StructField("user_name", StringType(), True),
+            StructField("phone_number", StringType(), True),
             StructField("product_id", IntegerType(), True),
             StructField("product_name", StringType(), True),
             StructField("product_type", StringType(), True),

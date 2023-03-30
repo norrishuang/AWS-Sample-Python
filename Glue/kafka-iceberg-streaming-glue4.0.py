@@ -9,6 +9,11 @@ from datetime import datetime
 from awsglue import DynamicFrame
 from pyspark.sql.functions import col, from_json, schema_of_json, current_timestamp
 from pyspark.sql.types import StructType, StructField, StringType, LongType, IntegerType
+
+'''
+Glue Iceberg Test
+通过 Glue 消费Kafka的数据，写S3（Iceberg）。多表，支持I U D
+'''
 ## @params: [JOB_NAME]
 args = getResolvedOptions(sys.argv, ['JOB_NAME'])
 
@@ -18,7 +23,7 @@ config = {
     "warehouse": "s3://myemr-bucket-01/data/iceberg-folder/",
     "dynamic_lock_table": "datacoding_iceberg_lock_table",
     "streaming_db": "kafka_db",
-    "streaming_table": "kafka_portfilo_02_topic"
+    "streaming_table": "kafka_iceberg_norrisdb_01"
 }
 
 #源表对应iceberg目标表（多表处理）
@@ -47,26 +52,8 @@ spark = SparkSession.builder \
 
 glueContext = GlueContext(spark.sparkContext)
 
-# .config("spark.sql.catalog.glue_catalog.lock-impl", "org.apache.iceberg.aws.glue.DynamoLockManager") \
-#     .config("spark.sql.catalog.glue_catalog.lock.table", "datacoding_iceberg_lock_table")
-#
-# sc = SparkContext()
-# glueContext = GlueContext(sc)
-# spark = glueContext.spark_session
-#
-# spark.conf.set("spark.sql.catalog.glue_catalog", "org.apache.iceberg.spark.SparkCatalog")
-# spark.conf.set("spark.sql.catalog.glue_catalog.warehouse", config['warehouse'])
-# spark.conf.set("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog")
-# spark.conf.set("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
-# spark.conf.set("spark.sql.catalog.glue_catalog.lock-impl", "org.apache.iceberg.aws.glue.DynamoLockManager")
-# spark.conf.set("spark.sql.catalog.glue_catalog.lock.table", "datacoding_iceberg_lock_table")
-# spark.conf.set("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
-
 job = Job(glueContext)
 job.init(args['JOB_NAME'], args)
-# # 处理数据转换精度问题导致的报错
-# spark.conf.set("spark.sql.ansi.enabled", "true")
-# spark.conf.set("spark.sql.storeAssignmentPolicy", "ANSI")
 logger=glueContext.get_logger()
 
 logger.info("Init...")
@@ -87,29 +74,6 @@ def getShowString(df, n=10, truncate=True, vertical=False):
 
 def processBatch(data_frame,batchId):
     if (data_frame.count() > 0):
-        # dataJsonDF = DynamicFrame.fromDF(data_frame, glueContext, "from_data_frame").apply_mapping(
-        #     [
-        #         ("before", "String", "before", "String"),
-        #         ("after", "String", "after", "String"),
-        #         ("source", "String", "source", "String"),
-        #         ("op", "String", "op", "String"),
-        #         ("ts_ms", "Long", "ts_ms", "Long"),
-        #         ("transaction", "String", "transaction", "String")
-        #     ]
-        # )
-
-        # dataJsonDF = data_frame.select(from_json(col("$json$data_infer_schema$_temporary$").cast("string"), schema).alias("data")).select(col("data.*"))
-        # logger.info("############  Create DataFrame  ############### \r\n" + getShowString(dataJsonDF,truncate = False))
-        # logger.info("############  Create DataFrame  ############### \r\n")
-        # # dataJsonDF.show(truncate = False)
-        # # dataInsertDYF = dataJsonDF.filter("op in ('c','r') and after is not null")
-        # dataInsertDYF = dataJsonDF.filter(f=lambda x: x["op"] in ["c", "r"])
-        # # 过滤 区分 insert upsert delete
-        # # dataUpsertDYF = dataJsonDF.filter("op in ('u') and after is not null")
-        # dataUpsertDYF = dataJsonDF.filter(f=lambda x: x["op"] in ["u"])
-        #
-        # # dataDeleteDYF = dataJsonDF.filter("op in ('d') and before is not null")
-        # dataDeleteDYF = dataJsonDF.filter(f=lambda x: x["op"] in ["d"])
         schema = StructType([
             StructField("before", StringType(), True),
             StructField("after", StringType(), True),

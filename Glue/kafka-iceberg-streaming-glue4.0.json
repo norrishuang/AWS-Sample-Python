@@ -1,0 +1,43 @@
+{
+  "name" : "kafka-iceberg-streaming-glue4.0",
+  "description" : "test data streaming ingestion for iceberg, data from kafka,Glue 4.0\nDo not modify, do not delete",
+  "role" : "arn:aws:iam::812046859005:role/my-glue-role",
+  "executionProperty" : {
+    "maxConcurrentRuns" : 1
+  },
+  "command" : {
+    "name" : "gluestreaming",
+    "scriptLocation" : "s3://aws-glue-assets-812046859005-us-east-1/scripts/kafka-iceberg-streaming-glue4.0.py",
+    "pythonVersion" : "3"
+  },
+  "defaultArguments" : {
+    "--enable-metrics" : "true",
+    "--enable-spark-ui" : "true",
+    "--user-jars-first" : "True",
+    "--spark-event-logs-path" : "s3://aws-glue-assets-812046859005-us-east-1/sparkHistoryLogs/",
+    "--enable-job-insights" : "false",
+    "--conf" : "spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+    "--enable-glue-datacatalog" : "true",
+    "--enable-continuous-cloudwatch-log" : "true",
+    "--job-bookmark-option" : "job-bookmark-disable",
+    "--job-language" : "python",
+    "--TempDir" : "s3://aws-glue-assets-812046859005-us-east-1/temporary/",
+    "--enable-auto-scaling" : "true"
+  },
+  "connections" : {
+    "connections" : [ "kafka_conn_cdc", "iceberg-connection" ]
+  },
+  "maxRetries" : 0,
+  "allocatedCapacity" : 2,
+  "maxCapacity" : 2.5,
+  "glueVersion" : "4.0",
+  "numberOfWorkers" : 10,
+  "workerType" : "G.025X",
+  "executionClass" : "STANDARD",
+  "sourceControlDetails" : {
+    "provider" : "GITHUB",
+    "repository" : "AWS-Sample-Python",
+    "branch" : "main",
+    "folder" : "Glue"
+  }
+}

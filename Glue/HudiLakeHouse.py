@@ -86,10 +86,7 @@ def processBatch(data_frame, batchId):
         dataJsonDF = data_frame.select(from_json(col("$json$data_infer_schema$_temporary$").cast("string"), schema).alias("ds")).select(col("ds.*"))
         logger.info("############  DataSet  ############### \r\n" + getShowString(dataJsonDF, truncate = False))
         dataJsonDF = dataJsonDF.filter("data is not null")
-        # sourceJson = dataJsonDF.select('data').first()
         # logger.info("############  Schema Json  ############### \r\n" + getShowString(sourceJson, truncate = False))
-
-        # schemaSource = schema_of_json(sourceJson[0])
 
         schemaSource = StructType([
             StructField("id", IntegerType(), True),

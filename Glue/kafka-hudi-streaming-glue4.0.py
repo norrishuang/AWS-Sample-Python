@@ -207,7 +207,7 @@ dataframe_ApacheKafka_hudi_test = glueContext.create_data_frame.from_catalog(
     transformation_ctx = "dataframe_ApacheKafka_hudi_test",
 )
 
-glueContext.forEachBatch(frame = dataframe_ApacheKafka_node1670731139435,
+glueContext.forEachBatch(frame = dataframe_ApacheKafka_hudi_test,
                          batch_function = processBatch,
                          options = {
                              "windowSize": "30 seconds",

@@ -41,7 +41,7 @@ tableIndexs = {
     "table02": "table02",
     "table01": "table01",
     "user_order_list_small_file": "user_order_list_small_file",
-    "user_order_list": "user_order_list",
+    "user_order_list": "user_order_list_01",
     "user_order_main": "user_order_main",
     "user_order_mor": "user_order_mor",
     "tb_schema_evolution": "tb_schema_evolution"
@@ -217,7 +217,7 @@ dataframe_ApacheKafka_source = glueContext.create_data_frame.from_options(
 glueContext.forEachBatch(frame = dataframe_ApacheKafka_source,
                          batch_function = processBatch,
                          options = {
-                             "windowSize": "60 seconds",
+                             "windowSize": "30 seconds",
                              "checkpointLocation": checkpoint_location,
                              "batchMaxRetries": 1
                          })

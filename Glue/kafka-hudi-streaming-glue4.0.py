@@ -196,12 +196,18 @@ def InsertDataLake(tableName,dataFrame):
                                                  connection_type = "custom.spark",
                                                  connection_options = write_options)
 
+kafka_options = {
+      "connectionName": "kafka_conn_cdc",
+      "topicName": "norrisdb01.norrisdb.user_order_list",
+      "startingOffsets": "earliest",
+      "inferSchema": "true",
+      "classification": "json"
+}
+
 # Script generated for node Apache Kafka
 dataframe_ApacheKafka_source = glueContext.create_data_frame.from_catalog(
-    database = config["streaming_db"],
-    table_name = config["streaming_table"],
-    additional_options = {"startingOffsets": "earliest", "inferSchema": "true"},
-    transformation_ctx = "dataframe_ApacheKafka_source",
+    connection_type="kafka",
+    connection_options=kafka_options
 )
 
 glueContext.forEachBatch(frame = dataframe_ApacheKafka_source,

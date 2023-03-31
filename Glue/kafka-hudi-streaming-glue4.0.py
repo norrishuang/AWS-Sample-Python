@@ -205,7 +205,7 @@ kafka_options = {
 }
 
 # Script generated for node Apache Kafka
-dataframe_ApacheKafka_source = glueContext.create_data_frame.from_catalog(
+dataframe_ApacheKafka_source = glueContext.create_data_frame.from_options(
     connection_type="kafka",
     connection_options=kafka_options
 )

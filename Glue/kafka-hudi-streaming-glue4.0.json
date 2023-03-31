@@ -1,0 +1,42 @@
+{
+  "name" : "kafka-hudi-streaming-glue4.0",
+  "description" : "test data streaming ingestion for Hudi, data from kafka,Glue 4.0\nDo not modify, do not delete",
+  "role" : "arn:aws:iam::812046859005:role/my-glue-role",
+  "executionProperty" : {
+    "maxConcurrentRuns" : 1
+  },
+  "command" : {
+    "name" : "gluestreaming",
+    "scriptLocation" : "s3://aws-glue-assets-812046859005-us-east-1/scripts/kafka-hudi-streaming-glue4.0.py",
+    "pythonVersion" : "3"
+  },
+  "defaultArguments" : {
+    "--enable-metrics" : "true",
+    "--enable-spark-ui" : "true",
+    "--spark-event-logs-path" : "s3://aws-glue-assets-812046859005-us-east-1/sparkHistoryLogs/",
+    "--enable-job-insights" : "false",
+    "--enable-glue-datacatalog" : "true",
+    "--enable-continuous-cloudwatch-log" : "true",
+    "--job-bookmark-option" : "job-bookmark-disable",
+    "--datalake-formats" : "hudi",
+    "--job-language" : "python",
+    "--TempDir" : "s3://aws-glue-assets-812046859005-us-east-1/temporary/",
+    "--enable-auto-scaling" : "true"
+  },
+  "connections" : {
+    "connections" : [ "kafka_conn_cdc" ]
+  },
+  "maxRetries" : 0,
+  "allocatedCapacity" : 0,
+  "maxCapacity" : 0.5,
+  "glueVersion" : "4.0",
+  "numberOfWorkers" : 2,
+  "workerType" : "G.025X",
+  "executionClass" : "STANDARD",
+  "sourceControlDetails" : {
+    "provider" : "GITHUB",
+    "repository" : "AWS-Sample-Python",
+    "branch" : "main",
+    "folder" : "Glue"
+  }
+}

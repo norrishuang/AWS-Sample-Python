@@ -24,7 +24,7 @@ HUDI_FORMAT = "org.apache.hudi"
 config = {
     "table_name": "user_order_list",
     "database_name": "hudi",
-    "target": "s3://myemr-bucket-01/data/hudi/user_order_list",
+
     "primary_key": "id",
     "sort_key": "id",
     "commits_to_retain": "4",
@@ -32,21 +32,7 @@ config = {
     "streaming_table": "kafka_iceberg_norrisdb_01"
 }
 
-write_options={
-    "hoodie.table.name": config['table_name'],
-    "className" : "org.apache.hudi",
-    "hoodie.datasource.write.storage.type": "COPY_ON_WRITE",
-    "hoodie.datasource.write.operation": "upsert",
-    "hoodie.datasource.write.recordkey.field": config["primary_key"],
-    "hoodie.datasource.write.precombine.field": config["sort_key"],
-    "hoodie.datasource.hive_sync.enable": "true",
-    "hoodie.datasource.hive_sync.database": config['database_name'],
-    "hoodie.datasource.hive_sync.table": config['table_name'],
-    "hoodie.datasource.hive_sync.partition_extractor_class": "org.apache.hudi.hive.MultiPartKeysValueExtractor",
-    "hoodie.datasource.hive_sync.use_jdbc": "false",
-    "hoodie.datasource.hive_sync.mode": "hms",
-    "path": config['target']
-}
+
 
 #源表对应iceberg目标表（多表处理）
 tableIndexs = {
@@ -77,7 +63,7 @@ logger.info('Initialization.')
 output_path = "s3://myemr-bucket-01/data/"
 job_time_string = datetime.now().strftime("%Y%m%d%")
 s3_target = output_path + job_time_string
-checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "checkpoint-01" + "/"
+checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "checkpoint-04" + "/"
 
 # 把 dataframe 转换成字符串，在logger中输出
 def getShowString(df, n=10, truncate=True, vertical=False):
@@ -191,6 +177,24 @@ def InsertDataLake(tableName,dataFrame):
     table_name = tableIndexs[tableName]
     logger.info("##############  Func:InputDataLake [ "+ tableName +  "] ############# \r\n"
                  + getShowString(dataFrame,truncate = False))
+
+    target = "s3://myemr-bucket-01/data/hudi/" + table_name
+
+    write_options={
+        "hoodie.table.name": table_name,
+        "className" : "org.apache.hudi",
+        "hoodie.datasource.write.storage.type": "COPY_ON_WRITE",
+        "hoodie.datasource.write.operation": "upsert",
+        "hoodie.datasource.write.recordkey.field": config["primary_key"],
+        "hoodie.datasource.write.precombine.field": config["sort_key"],
+        "hoodie.datasource.hive_sync.enable": "true",
+        "hoodie.datasource.hive_sync.database": database_name,
+        "hoodie.datasource.hive_sync.table": table_name,
+        "hoodie.datasource.hive_sync.partition_extractor_class": "org.apache.hudi.hive.MultiPartKeysValueExtractor",
+        "hoodie.datasource.hive_sync.use_jdbc": "false",
+        "hoodie.datasource.hive_sync.mode": "hms",
+        "path": target
+    }
 
     glueContext.write_dynamic_frame.from_options(frame = DynamicFrame.fromDF(dataFrame, glueContext, "outputDF"),
                                                  connection_type = "custom.spark",

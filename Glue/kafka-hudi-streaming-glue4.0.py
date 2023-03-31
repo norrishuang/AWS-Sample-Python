@@ -94,7 +94,7 @@ def processBatch(data_frame,batchId):
         ])
 
         dataJsonDF = data_frame.select(from_json(col("$json$data_infer_schema$_temporary$").cast("string"), schema).alias("data")).select(col("data.*"))
-        # logger.info("############  Create DataFrame  ############### \r\n" + getShowString(dataJsonDF,truncate = False))
+        logger.info("############  Create DataFrame  ############### \r\n" + getShowString(dataJsonDF,truncate = False))
 
         dataInsert = dataJsonDF.filter("op in ('c','r') and after is not null")
         # 过滤 区分 insert upsert delete
@@ -182,11 +182,11 @@ def processBatch(data_frame,batchId):
                 InsertDataLake(tableName,dataDFOutput)
 
 def InsertDataLake(tableName,dataFrame):
-    # logger.info("##############  Func:InputDataLake [ "+ tableName +  "] ############# \r\n"
-    #             + getShowString(dataFrame,truncate = False))
 
     database_name = config["database_name"]
     table_name = tableIndexs[tableName]
+    logger.info("##############  Func:InputDataLake [ "+ tableName +  "] ############# \r\n"
+                 + getShowString(dataFrame,truncate = False))
 
     # dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
 

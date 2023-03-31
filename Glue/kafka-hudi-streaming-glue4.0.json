@@ -30,7 +30,7 @@
   "allocatedCapacity" : 0,
   "maxCapacity" : 0.5,
   "glueVersion" : "4.0",
-  "numberOfWorkers" : 2,
+  "numberOfWorkers" : 10,
   "workerType" : "G.025X",
   "executionClass" : "STANDARD",
   "sourceControlDetails" : {

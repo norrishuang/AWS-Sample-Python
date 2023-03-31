@@ -1,5 +1,6 @@
 import sys
 from awsglue.transforms import *
+import boto3
 from awsglue.utils import getResolvedOptions
 from pyspark.sql.session import SparkSession
 from awsglue.context import GlueContext
@@ -61,12 +62,15 @@ tableIndexs = {
 }
 
 
+args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+
 spark = SparkSession.builder.config('spark.serializer','org.apache.spark.serializer.KryoSerializer').getOrCreate()
 glueContext = GlueContext(spark.sparkContext)
 job = Job(glueContext)
 job.init(args['JOB_NAME'], args)
 
 logger = glueContext.get_logger()
+glueClient = boto3.client('glue')
 logger.info('Initialization.')
 
 # S3 sink locations
@@ -193,17 +197,17 @@ def InsertDataLake(tableName,dataFrame):
                                                  connection_options = write_options)
 
 # Script generated for node Apache Kafka
-dataframe_ApacheKafka_hudi_test = glueContext.create_data_frame.from_catalog(
+dataframe_ApacheKafka_source = glueContext.create_data_frame.from_catalog(
     database = config["streaming_db"],
     table_name = config["streaming_table"],
     additional_options = {"startingOffsets": "earliest", "inferSchema": "true"},
-    transformation_ctx = "dataframe_ApacheKafka_hudi_test",
+    transformation_ctx = "dataframe_ApacheKafka_source",
 )
 
-glueContext.forEachBatch(frame = dataframe_ApacheKafka_hudi_test,
+glueContext.forEachBatch(frame = dataframe_ApacheKafka_source,
                          batch_function = processBatch,
                          options = {
-                             "windowSize": "30 seconds",
+                             "windowSize": "60 seconds",
                              "checkpointLocation": checkpoint_location,
                              "batchMaxRetries": 1
                          })

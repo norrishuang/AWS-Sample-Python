@@ -11,21 +11,22 @@
     "pythonVersion" : "3"
   },
   "defaultArguments" : {
+    "--enable-glue-datacatalog" : "true",
+    "--job-bookmark-option" : "job-bookmark-disable",
+    "--datalake-formats" : "iceberg",
+    "--TempDir" : "s3://aws-glue-assets-812046859005-us-east-1/temporary/",
     "--enable-metrics" : "true",
     "--enable-spark-ui" : "true",
     "--user-jars-first" : "True",
     "--spark-event-logs-path" : "s3://aws-glue-assets-812046859005-us-east-1/sparkHistoryLogs/",
     "--enable-job-insights" : "false",
     "--conf" : "spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-    "--enable-glue-datacatalog" : "true",
     "--enable-continuous-cloudwatch-log" : "true",
-    "--job-bookmark-option" : "job-bookmark-disable",
     "--job-language" : "python",
-    "--TempDir" : "s3://aws-glue-assets-812046859005-us-east-1/temporary/",
     "--enable-auto-scaling" : "true"
   },
   "connections" : {
-    "connections" : [ "kafka_conn_cdc", "iceberg-connection" ]
+    "connections" : [ "kafka_conn_cdc" ]
   },
   "maxRetries" : 0,
   "allocatedCapacity" : 2,

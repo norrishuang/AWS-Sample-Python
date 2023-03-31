@@ -73,7 +73,7 @@ logger.info('Initialization.')
 output_path = "s3://myemr-bucket-01/data/"
 job_time_string = datetime.now().strftime("%Y%m%d%")
 s3_target = output_path + job_time_string
-checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "checkpoint-01" + "/"
+checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "checkpoint-02" + "/"
 
 # 把 dataframe 转换成字符串，在logger中输出
 def getShowString(df, n=10, truncate=True, vertical=False):
@@ -200,14 +200,14 @@ def InsertDataLake(tableName,dataFrame):
                                                  connection_options = additional_options)
 
 # Script generated for node Apache Kafka
-dataframe_ApacheKafka_Node_hudi_test = glueContext.create_data_frame.from_catalog(
+dataframe_ApacheKafka_hudi_test = glueContext.create_data_frame.from_catalog(
     database = config["streaming_db"],
     table_name = config["streaming_table"],
     additional_options = {"startingOffsets": "earliest", "inferSchema": "true"},
-    transformation_ctx = "dataframe_ApacheKafka_Node_hudi_test",
+    transformation_ctx = "dataframe_ApacheKafka_hudi_test",
 )
 
-glueContext.forEachBatch(frame = dataframe_ApacheKafka_Node_hudi_test,
+glueContext.forEachBatch(frame = dataframe_ApacheKafka_node1670731139435,
                          batch_function = processBatch,
                          options = {
                              "windowSize": "30 seconds",

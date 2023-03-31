@@ -31,7 +31,7 @@ config = {
     "streaming_table": "kafka_iceberg_norrisdb_01"
 }
 
-additional_options={
+write_options={
     "hoodie.table.name": config['table_name'],
     "className" : "org.apache.hudi",
     "hoodie.datasource.write.storage.type": "COPY_ON_WRITE",
@@ -73,7 +73,7 @@ logger.info('Initialization.')
 output_path = "s3://myemr-bucket-01/data/"
 job_time_string = datetime.now().strftime("%Y%m%d%")
 s3_target = output_path + job_time_string
-checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "checkpoint-02" + "/"
+checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "checkpoint-01" + "/"
 
 # 把 dataframe 转换成字符串，在logger中输出
 def getShowString(df, n=10, truncate=True, vertical=False):
@@ -188,16 +188,9 @@ def InsertDataLake(tableName,dataFrame):
     logger.info("##############  Func:InputDataLake [ "+ tableName +  "] ############# \r\n"
                  + getShowString(dataFrame,truncate = False))
 
-    # dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
-
-    # dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
-    # dyDataFrame.writeTo(f"glue_catalog.{database_name}.{table_name}") \
-    #     .option("merge-schema", "true") \
-    #     .option("check-ordering","false").append()
-
     glueContext.write_dynamic_frame.from_options(frame = DynamicFrame.fromDF(dataFrame, glueContext, "outputDF"),
                                                  connection_type = "custom.spark",
-                                                 connection_options = additional_options)
+                                                 connection_options = write_options)
 
 # Script generated for node Apache Kafka
 dataframe_ApacheKafka_hudi_test = glueContext.create_data_frame.from_catalog(

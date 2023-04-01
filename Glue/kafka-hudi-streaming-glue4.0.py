@@ -59,6 +59,7 @@ logger = glueContext.get_logger()
 glueClient = boto3.client('glue')
 logger.info('Initialization.')
 
+
 # S3 sink locations
 output_path = "s3://myemr-bucket-01/data/"
 job_time_string = datetime.now().strftime("%Y%m%d%")
@@ -86,40 +87,15 @@ def processBatch(data_frame,batchId):
         dataJsonDF = data_frame.select(from_json(col("$json$data_infer_schema$_temporary$").cast("string"), schema).alias("data")).select(col("data.*"))
         logger.info("############  Create DataFrame  ############### \r\n" + getShowString(dataJsonDF,truncate = False))
 
-        dataInsert = dataJsonDF.filter("op in ('c','r') and after is not null")
+        dataUpsert = dataJsonDF.filter("op in ('c','r','u') and after is not null")
         # 过滤 区分 insert upsert delete
-        dataUpsert = dataJsonDF.filter("op in ('u') and after is not null")
+        # dataUpsert = dataJsonDF.filter("op in ('u') and after is not null")
 
         dataDelete = dataJsonDF.filter("op in ('d') and before is not null")
 
-        if(dataInsert.count() > 0):
-            #### 分离一个topics多表的问题。
-            # dataInsert = dataInsertDYF.toDF()
-            sourceJson = dataInsert.select('source').first()
-            schemaSource = schema_of_json(sourceJson[0])
-
-            # 获取多表
-            dataTables = dataInsert.select(from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
-                .select(col("SOURCE.db"),col("SOURCE.table")).distinct()
-            # logger.info("############  MutiTables  ############### \r\n" + getShowString(dataTables,truncate = False))
-            rowTables = dataTables.collect()
-
-            for cols in rowTables :
-                tableName = cols[1]
-                dataDF = dataInsert.select(col("after"), \
-                                           from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
-                    .filter("SOURCE.table = '" + tableName + "'")
-                dataJson = dataDF.select('after').first()
-                schemaData = schema_of_json(dataJson[0])
-                logger.info("############  Insert Into-GetSchema-FirstRow:" + dataJson[0])
-
-                dataDFOutput = dataDF.select(from_json(col("after").cast("string"),schemaData).alias("DFADD")).select(col("DFADD.*"), current_timestamp().alias("ts"))
-                # logger.info("############  INSERT INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
-                InsertDataLake(tableName, dataDFOutput)
-
         if(dataUpsert.count() > 0):
             #### 分离一个topics多表的问题。
-            # dataUpsert = dataUpsertDYF.toDF()
+            # dataInsert = dataInsertDYF.toDF()
             sourceJson = dataUpsert.select('source').first()
             schemaSource = schema_of_json(sourceJson[0])
 
@@ -134,16 +110,12 @@ def processBatch(data_frame,batchId):
                 dataDF = dataUpsert.select(col("after"), \
                                            from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
                     .filter("SOURCE.table = '" + tableName + "'")
-
-                ##由于merge into schema顺序的问题，这里schema从表中获取（顺序问题待解决）
-                database_name = config["database_name"]
-                table_name = tableIndexs[tableName]
-                schemaData = spark.table(f"glue_catalog.{database_name}.{table_name}").schema
-                # dataJson = dataDF.select('after').first()
-                # schemaData = schema_of_json(dataJson[0])
+                dataJson = dataDF.select('after').first()
+                schemaData = schema_of_json(dataJson[0])
+                logger.info("############  Insert Into-GetSchema-FirstRow:" + dataJson[0])
 
                 dataDFOutput = dataDF.select(from_json(col("after").cast("string"),schemaData).alias("DFADD")).select(col("DFADD.*"), current_timestamp().alias("ts"))
-                logger.info("############  MERGE INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
+                # logger.info("############  INSERT INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
                 InsertDataLake(tableName, dataDFOutput)
 
 

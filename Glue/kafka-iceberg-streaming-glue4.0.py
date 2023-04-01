@@ -86,7 +86,7 @@ def processBatch(data_frame,batchId):
         dataJsonDF = data_frame.select(from_json(col("$json$data_infer_schema$_temporary$").cast("string"), schema).alias("data")).select(col("data.*"))
         # logger.info("############  Create DataFrame  ############### \r\n" + getShowString(dataJsonDF,truncate = False))
 
-        dataInsert = dataJsonDF.filter("op in ('c','r') and after is not null")
+        dataInsert = dataJsonDF.filter("op in ('c','r','u') and after is not null")
         # 过滤 区分 insert upsert delete
         dataUpsert = dataJsonDF.filter("op in ('u') and after is not null")
 
@@ -115,7 +115,7 @@ def processBatch(data_frame,batchId):
 
                 dataDFOutput = dataDF.select(from_json(col("after").cast("string"),schemaData).alias("DFADD")).select(col("DFADD.*"), current_timestamp().alias("ts"))
                 # logger.info("############  INSERT INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
-                InsertDataLake(tableName, dataDFOutput)
+                MergeIntoDataLake(tableName, dataDFOutput)
 
         if(dataUpsert.count() > 0):
             #### 分离一个topics多表的问题。
@@ -212,14 +212,21 @@ def DeleteDataFromDataLake(tableName,dataFrame):
     # {"data":{"id":1,"reward":10,"channels":"['email', 'mobile', 'social']","difficulty":"10","duration":"7","offer_type":"bogo","offer_id":"ae264e3637204a6fb9bb56bc8210ddfd"},"op":"+I"}
     spark.sql(query)
 # Script generated for node Apache Kafka
-dataframe_ApacheKafka_node1670731139435 = glueContext.create_data_frame.from_catalog(
-    database = config["streaming_db"],
-    table_name = config["streaming_table"],
-    additional_options = {"startingOffsets": "earliest", "inferSchema": "true"},
-    transformation_ctx = "dataframe_ApacheKafka_node1670731139435",
+kafka_options = {
+    "connectionName": "kafka_conn_cdc",
+    "topicName": "norrisdb01.norrisdb.user_order_list",
+    "startingOffsets": "earliest",
+    "inferSchema": "true",
+    "classification": "json"
+}
+
+# Script generated for node Apache Kafka
+dataframe_ApacheKafka_source = glueContext.create_data_frame.from_options(
+    connection_type="kafka",
+    connection_options=kafka_options
 )
 
-glueContext.forEachBatch(frame = dataframe_ApacheKafka_node1670731139435,
+glueContext.forEachBatch(frame = dataframe_ApacheKafka_source,
                          batch_function = processBatch,
                          options = {
                              "windowSize": "30 seconds",

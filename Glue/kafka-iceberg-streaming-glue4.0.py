@@ -88,7 +88,7 @@ def processBatch(data_frame,batchId):
 
         dataInsert = dataJsonDF.filter("op in ('c','r','u') and after is not null")
         # 过滤 区分 insert upsert delete
-        dataUpsert = dataJsonDF.filter("op in ('u') and after is not null")
+        # dataUpsert = dataJsonDF.filter("op in ('u') and after is not null")
 
         dataDelete = dataJsonDF.filter("op in ('d') and before is not null")
 
@@ -117,34 +117,34 @@ def processBatch(data_frame,batchId):
                 # logger.info("############  INSERT INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
                 MergeIntoDataLake(tableName, dataDFOutput)
 
-        if(dataUpsert.count() > 0):
-            #### 分离一个topics多表的问题。
-            # dataUpsert = dataUpsertDYF.toDF()
-            sourceJson = dataUpsert.select('source').first()
-            schemaSource = schema_of_json(sourceJson[0])
-
-            # 获取多表
-            dataTables = dataUpsert.select(from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
-                .select(col("SOURCE.db"),col("SOURCE.table")).distinct()
-            # logger.info("############  MutiTables  ############### \r\n" + getShowString(dataTables,truncate = False))
-            rowTables = dataTables.collect()
-
-            for cols in rowTables :
-                tableName = cols[1]
-                dataDF = dataUpsert.select(col("after"), \
-                                           from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
-                    .filter("SOURCE.table = '" + tableName + "'")
-
-                ##由于merge into schema顺序的问题，这里schema从表中获取（顺序问题待解决）
-                database_name = config["database_name"]
-                table_name = tableIndexs[tableName]
-                schemaData = spark.table(f"glue_catalog.{database_name}.{table_name}").schema
-                # dataJson = dataDF.select('after').first()
-                # schemaData = schema_of_json(dataJson[0])
-
-                dataDFOutput = dataDF.select(from_json(col("after").cast("string"),schemaData).alias("DFADD")).select(col("DFADD.*"), current_timestamp().alias("ts"))
-                logger.info("############  MERGE INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
-                MergeIntoDataLake(tableName, dataDFOutput)
+        # if(dataUpsert.count() > 0):
+        #     #### 分离一个topics多表的问题。
+        #     # dataUpsert = dataUpsertDYF.toDF()
+        #     sourceJson = dataUpsert.select('source').first()
+        #     schemaSource = schema_of_json(sourceJson[0])
+        #
+        #     # 获取多表
+        #     dataTables = dataUpsert.select(from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
+        #         .select(col("SOURCE.db"),col("SOURCE.table")).distinct()
+        #     # logger.info("############  MutiTables  ############### \r\n" + getShowString(dataTables,truncate = False))
+        #     rowTables = dataTables.collect()
+        #
+        #     for cols in rowTables :
+        #         tableName = cols[1]
+        #         dataDF = dataUpsert.select(col("after"), \
+        #                                    from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
+        #             .filter("SOURCE.table = '" + tableName + "'")
+        #
+        #         ##由于merge into schema顺序的问题，这里schema从表中获取（顺序问题待解决）
+        #         database_name = config["database_name"]
+        #         table_name = tableIndexs[tableName]
+        #         schemaData = spark.table(f"glue_catalog.{database_name}.{table_name}").schema
+        #         # dataJson = dataDF.select('after').first()
+        #         # schemaData = schema_of_json(dataJson[0])
+        #
+        #         dataDFOutput = dataDF.select(from_json(col("after").cast("string"),schemaData).alias("DFADD")).select(col("DFADD.*"), current_timestamp().alias("ts"))
+        #         logger.info("############  MERGE INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
+        #         MergeIntoDataLake(tableName, dataDFOutput)
 
 
         if(dataDelete.count() > 0):

@@ -33,7 +33,7 @@ tableIndexs = {
     "table02": "table02",
     "table01": "table01",
     "user_order_list_small_file": "user_order_list_small_file",
-    "user_order_list": "user_order_list_01",
+    "user_order_list": "native_user_order_list_01",
     "user_order_main": "user_order_main",
     "user_order_mor": "user_order_mor",
     "tb_schema_evolution": "tb_schema_evolution"

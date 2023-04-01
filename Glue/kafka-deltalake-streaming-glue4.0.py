@@ -21,7 +21,7 @@ args = getResolvedOptions(sys.argv, ['JOB_NAME'])
 
 config = {
     "table_name": "user_order_list",
-    "database_name": "hudi",
+    "database_name": "deltalakedb",
     "streaming_db": "kafka_db",
     "streaming_table": "kafka_iceberg_norrisdb_01"
 }

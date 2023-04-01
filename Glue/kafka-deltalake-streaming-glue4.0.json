@@ -28,10 +28,10 @@
     "connections" : [ "kafka_conn_cdc" ]
   },
   "maxRetries" : 0,
-  "allocatedCapacity" : 4,
-  "maxCapacity" : 4.0,
+  "allocatedCapacity" : 10,
+  "maxCapacity" : 10.0,
   "glueVersion" : "4.0",
-  "numberOfWorkers" : 4,
+  "numberOfWorkers" : 10,
   "workerType" : "G.1X",
   "executionClass" : "STANDARD",
   "sourceControlDetails" : {

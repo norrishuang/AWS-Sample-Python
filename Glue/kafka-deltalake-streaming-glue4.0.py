@@ -33,7 +33,7 @@ tableIndexs = {
     "table02": "table02",
     "table01": "table01",
     "user_order_list_small_file": "user_order_list_small_file",
-    "user_order_list": "native_user_order_list_01",
+    "user_order_list": "user_order_list",
     "user_order_main": "user_order_main",
     "user_order_mor": "user_order_mor",
     "tb_schema_evolution": "tb_schema_evolution"
@@ -143,31 +143,31 @@ def InsertDataLake(tableName,dataFrame):
     logger.info("##############  Func:InputDataLake [ "+ tableName +  "] ############# \r\n"
                  + getShowString(dataFrame,truncate = False))
 
-    # target = "s3://myemr-bucket-01/data/deltalake/" + table_name
-    #
-    # additional_options={
-    #     "path": target
-    # }
+    target = "s3://myemr-bucket-01/data/deltalakedb/" + table_name
+
+    additional_options={
+        "path": target
+    }
 
     #需要做一次转换，不然spark session获取不到
-    dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
-    TempTable = "tmp_" + tableName + "_upsert"
-    dyDataFrame.createOrReplaceTempView(TempTable)
-    queryDF = spark.sql(f"""select * from {TempTable}""")
-    logger.info("##############  Func:Temp Table [ temp_table] ############# \r\n"
-                + getShowString(queryDF,truncate = False))
-    # query = f"""INSERT INTO glue_catalog.{database_name}.{table_name}  SELECT * FROM {TempTable}"""
-    query = f"""MERGE INTO {database_name}.{table_name} t USING (select * from {TempTable}) u ON t.ID = u.ID
-            WHEN MATCHED THEN UPDATE
-                SET *
-            WHEN NOT MATCHED THEN INSERT * """
-    logger.info("####### Execute SQL:" + query)
-    spark.sql(query)
+    # dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
+    # TempTable = "tmp_" + tableName + "_upsert"
+    # dyDataFrame.createOrReplaceTempView(TempTable)
+    # queryDF = spark.sql(f"""select * from {TempTable}""")
+    # logger.info("##############  Func:Temp Table [ temp_table] ############# \r\n"
+    #             + getShowString(queryDF,truncate = False))
+    # # query = f"""INSERT INTO glue_catalog.{database_name}.{table_name}  SELECT * FROM {TempTable}"""
+    # query = f"""MERGE INTO {database_name}.{table_name} t USING (select * from {TempTable}) u ON t.ID = u.ID
+    #         WHEN MATCHED THEN UPDATE
+    #             SET *
+    #         WHEN NOT MATCHED THEN INSERT * """
+    # logger.info("####### Execute SQL:" + query)
+    # spark.sql(query)
 
-    # dataFrame.write.format("delta") \
-    #     .options(**additional_options) \
-    #     .mode('append') \
-    #     .save()
+    dataFrame.write.format("delta") \
+        .options(**additional_options) \
+        .mode('append') \
+        .save()
 
 kafka_options = {
       "connectionName": "kafka_conn_cdc",

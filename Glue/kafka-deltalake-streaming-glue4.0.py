@@ -13,7 +13,7 @@ from pyspark.sql.types import StructType, StructField, StringType, LongType, Int
 
 '''
 Glue DelteLake Test
-通过 Glue 消费Kafka的数据，写S3（Hudi）。多表，支持I U D
+通过 Glue 消费Kafka的数据，写S3（DeltaLake）。多表，支持I U D
 '''
 ## @params: [JOB_NAME]
 args = getResolvedOptions(sys.argv, ['JOB_NAME'])

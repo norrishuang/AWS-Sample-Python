@@ -19,7 +19,7 @@ args = getResolvedOptions(sys.argv, ['JOB_NAME'])
 
 config = {
     "table_name": "iceberg_portfolio_kc",
-    "database_name": "iceberg_db",
+    "database_name": "icebergdb",
     "warehouse": "s3://myemr-bucket-01/data/iceberg-folder/",
     "dynamic_lock_table": "datacoding_iceberg_lock_table",
     "streaming_db": "kafka_db",

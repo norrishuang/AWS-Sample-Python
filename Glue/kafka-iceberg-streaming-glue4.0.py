@@ -62,7 +62,7 @@ logger.info("Init...")
 output_path = "s3://myemr-bucket-01/data/"
 job_time_string = datetime.now().strftime("%Y%m%d%")
 s3_target = output_path + job_time_string
-checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "20230408" + "/"
+checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "20230409" + "/"
 
 additional_options = {}
 # 把 dataframe 转换成字符串，在logger中输出
@@ -182,11 +182,15 @@ def InsertDataLake(tableName,dataFrame):
     dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF().repartition(4,col("id"));
 
     ###如果表不存在，创建一个空表
-    # warehousepath = config['warehouse']
     TempTable = "tmp_" + tableName + "_upsert"
     dyDataFrame.createOrReplaceTempView(TempTable)
-
-    creattbsql = f"""CREATE TABLE IF NOT EXISTS glue_catalog.{database_name}.{tableName} USING iceberg AS SELECT * FROM {TempTable} limit 0"""
+    ###从空表create一次，解决在writeto的时候，空表没有字段的问题。
+    creattbsql = f"""CREATE TABLE IF NOT EXISTS glue_catalog.{database_name}.{tableName} 
+          USING iceberg 
+          TBLPROPERTIES ('write.distribution-mode'='hash',
+          'format-version'='2',
+          'write.spark.accept-any-schema'='true') 
+          AS SELECT * FROM {TempTable} limit 0"""
     logger.info("####### IF table not exists, create it:" + creattbsql)
     spark.sql(creattbsql)
 

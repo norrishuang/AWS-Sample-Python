@@ -181,6 +181,12 @@ def InsertDataLake(tableName,dataFrame):
     # partition as id
     dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF().repartition(4,col("id"));
 
+    ###如果表不存在，创建一个空表
+    # warehousepath = config['warehouse']
+    creattbsql = f"""CREATE TABLE IF NOT EXISTS glue_catalog.{database_name}.{table_name} USING iceberg """
+    logger.info("####### IF table not exists, create it:" + creattbsql)
+    spark.sql(creattbsql)
+
     # dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
     dyDataFrame.writeTo(f"glue_catalog.{database_name}.{table_name}") \
         .option("merge-schema", "true") \
@@ -215,7 +221,7 @@ def DeleteDataFromDataLake(tableName,dataFrame):
 # Script generated for node Apache Kafka
 kafka_options = {
     "connectionName": "kafka_conn_cdc",
-    "topicName": "norrisdb.norrisdb.user_order_list",
+    "topicName": "norrisdb.norrisdb.user_order_list,norrisdb.norrisdb.customer_info",
     "startingOffsets": "earliest",
     "inferSchema": "true",
     "classification": "json"

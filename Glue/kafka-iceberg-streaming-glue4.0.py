@@ -86,9 +86,9 @@ def processBatch(data_frame,batchId):
         dataJsonDF = data_frame.select(from_json(col("$json$data_infer_schema$_temporary$").cast("string"), schema).alias("data")).select(col("data.*"))
         # logger.info("############  Create DataFrame  ############### \r\n" + getShowString(dataJsonDF,truncate = False))
 
-        dataInsert = dataJsonDF.filter("op in ('r') and after is not null")
+        dataInsert = dataJsonDF.filter("op in ('r','c') and after is not null")
         # 过滤 区分 insert upsert delete
-        dataUpsert = dataJsonDF.filter("op in ('c','u') and after is not null")
+        dataUpsert = dataJsonDF.filter("op in ('u') and after is not null")
 
         dataDelete = dataJsonDF.filter("op in ('d') and before is not null")
 

@@ -178,7 +178,8 @@ def InsertDataLake(tableName,dataFrame):
     database_name = config["database_name"]
     table_name = tableIndexs[tableName]
 
-    dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
+    # partition as id
+    dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF().repartition(4,col("id"));
 
     # dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
     dyDataFrame.writeTo(f"glue_catalog.{database_name}.{table_name}") \

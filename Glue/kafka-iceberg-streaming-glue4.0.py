@@ -137,8 +137,8 @@ def processBatch(data_frame,batchId):
 
                 ##由于merge into schema顺序的问题，这里schema从表中获取（顺序问题待解决）
                 database_name = config["database_name"]
-                table_name = tableIndexs[tableName]
-                schemaData = spark.table(f"glue_catalog.{database_name}.{table_name}").schema
+                # table_name = tableIndexs[tableName]
+                schemaData = spark.table(f"glue_catalog.{database_name}.{tableName}").schema
                 # dataJson = dataDF.select('after').first()
                 # schemaData = schema_of_json(dataJson[0])
 

@@ -29,11 +29,11 @@
     "connections" : [ "kafka_conn_cdc" ]
   },
   "maxRetries" : 0,
-  "allocatedCapacity" : 10,
-  "maxCapacity" : 10.0,
+  "allocatedCapacity" : 2,
+  "maxCapacity" : 2.5,
   "glueVersion" : "4.0",
   "numberOfWorkers" : 10,
-  "workerType" : "G.1X",
+  "workerType" : "G.025X",
   "executionClass" : "STANDARD",
   "sourceControlDetails" : {
     "provider" : "GITHUB",

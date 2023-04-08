@@ -149,25 +149,40 @@ def InsertDataLake(tableName,dataFrame):
         "path": target
     }
 
-    #需要做一次转换，不然spark session获取不到
-    # dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
-    # TempTable = "tmp_" + tableName + "_upsert"
-    # dyDataFrame.createOrReplaceTempView(TempTable)
-    # queryDF = spark.sql(f"""select * from {TempTable}""")
-    # logger.info("##############  Func:Temp Table [ temp_table] ############# \r\n"
-    #             + getShowString(queryDF,truncate = False))
-    # # query = f"""INSERT INTO glue_catalog.{database_name}.{table_name}  SELECT * FROM {TempTable}"""
-    # query = f"""MERGE INTO {database_name}.{table_name} t USING (select * from {TempTable}) u ON t.ID = u.ID
-    #         WHEN MATCHED THEN UPDATE
-    #             SET *
-    #         WHEN NOT MATCHED THEN INSERT * """
-    # logger.info("####### Execute SQL:" + query)
-    # spark.sql(query)
-
     dataFrame.write.format("delta") \
         .options(**additional_options) \
         .mode('append') \
         .save()
+def MergeIntoDataLake(tableName,dataFrame):
+    # dataUpsertDF = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame")
+    # outputUpsert = dataUpsertDF.toDF()
+    logger.info("##############  Func:InputDataLake [ "+ tableName +  "] ############# \r\n"
+                + getShowString(dataFrame,truncate = False))
+
+    database_name = config["database_name"]
+    table_name = tableIndexs[tableName]
+    #需要做一次转换，不然spark session获取不到
+    dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
+    TempTable = "tmp_" + tableName + "_upsert"
+    dyDataFrame.createOrReplaceTempView(TempTable)
+    # queryDF = spark.sql(f"""select * from {TempTable}""")
+    # logger.info("##############  Func:Temp Table [ temp_table] ############# \r\n"
+    #             + getShowString(queryDF,truncate = False))
+
+    ###如果表不存在，创建一个空表
+    creattbsql = f"""CREATE TABLE IF NOT EXISTS {database_name}.{table_name}
+        USING DELTA
+        LOCATION 's3://myemr-bucket-01/data/{database_name}/{table_name}'
+    """
+    logger.info("####### IF table not exists, create it:" + creattbsql)
+    spark.sql(creattbsql)
+
+    query = f"""MERGE INTO {database_name}.{table_name} t USING (select * from {TempTable}) u ON t.ID = u.ID
+            WHEN MATCHED THEN UPDATE
+                SET *
+            WHEN NOT MATCHED THEN INSERT * """
+    logger.info("####### Execute SQL:" + query)
+    spark.sql(query)
 
 kafka_options = {
       "connectionName": "kafka_conn_cdc",

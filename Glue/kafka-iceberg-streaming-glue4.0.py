@@ -188,7 +188,7 @@ def InsertDataLake(tableName,dataFrame):
     spark.sql(creattbsql)
 
     # dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
-    dyDataFrame.writeTo(f"glue_catalog.{database_name}.{table_name}") \
+    dyDataFrame.writeTo(f"glue_catalog.{database_name}.{tableName}") \
         .option("merge-schema", "true") \
         .option("check-ordering","false").append()
 
@@ -213,7 +213,7 @@ def MergeIntoDataLake(tableName,dataFrame):
 def DeleteDataFromDataLake(tableName,dataFrame):
     database_name = config["database_name"]
     # table_name = tableIndexs[tableName]
-    dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
+    dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF()
     dyDataFrame.createOrReplaceTempView("tmp_" + tableName + "_delete")
     query = f"""DELETE FROM glue_catalog.{database_name}.{tableName} AS t1 where EXISTS (SELECT ID FROM tmp_{tableName}_delete WHERE t1.ID = ID)"""
     # {"data":{"id":1,"reward":10,"channels":"['email', 'mobile', 'social']","difficulty":"10","duration":"7","offer_type":"bogo","offer_id":"ae264e3637204a6fb9bb56bc8210ddfd"},"op":"+I"}

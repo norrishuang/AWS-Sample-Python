@@ -62,7 +62,7 @@ logger.info("Init...")
 output_path = "s3://myemr-bucket-01/data/"
 job_time_string = datetime.now().strftime("%Y%m%d%")
 s3_target = output_path + job_time_string
-checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "checkpoint-05" + "/"
+checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "20230408" + "/"
 
 additional_options = {}
 # 把 dataframe 转换成字符串，在logger中输出
@@ -215,7 +215,7 @@ def DeleteDataFromDataLake(tableName,dataFrame):
 # Script generated for node Apache Kafka
 kafka_options = {
     "connectionName": "kafka_conn_cdc",
-    "topicName": "norrisdb01.norrisdb.user_order_list",
+    "topicName": "norrisdb.norrisdb.user_order_list",
     "startingOffsets": "earliest",
     "inferSchema": "true",
     "classification": "json"

@@ -176,14 +176,14 @@ def InsertDataLake(tableName,dataFrame):
     #             + getShowString(dataFrame,truncate = False))
 
     database_name = config["database_name"]
-    table_name = tableIndexs[tableName]
+    # table_name = tableIndexs[tableName]
 
     # partition as id
     dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF().repartition(4,col("id"));
 
     ###如果表不存在，创建一个空表
     # warehousepath = config['warehouse']
-    creattbsql = f"""CREATE TABLE IF NOT EXISTS glue_catalog.{database_name}.{table_name} USING iceberg """
+    creattbsql = f"""CREATE TABLE IF NOT EXISTS glue_catalog.{database_name}.{tableName} USING iceberg """
     logger.info("####### IF table not exists, create it:" + creattbsql)
     spark.sql(creattbsql)
 
@@ -197,13 +197,13 @@ def MergeIntoDataLake(tableName,dataFrame):
     # logger.info("##############  Func:MergeIntoDataLake [ "+ tableName +  "] ############# \r\n"
     #             + getShowString(dataFrame,truncate = False))
     database_name = config["database_name"]
-    table_name = tableIndexs[tableName]
+    # table_name = tableIndexs[tableName]
     dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
 
     TempTable = "tmp_" + tableName + "_upsert"
     dyDataFrame.createOrReplaceTempView(TempTable)
 
-    query = f"""MERGE INTO glue_catalog.{database_name}.{table_name} t USING (SELECT * FROM {TempTable}) u ON t.ID = u.ID
+    query = f"""MERGE INTO glue_catalog.{database_name}.{tableName} t USING (SELECT * FROM {TempTable}) u ON t.ID = u.ID
             WHEN MATCHED THEN UPDATE
                 SET *
             WHEN NOT MATCHED THEN INSERT * """
@@ -212,10 +212,10 @@ def MergeIntoDataLake(tableName,dataFrame):
 
 def DeleteDataFromDataLake(tableName,dataFrame):
     database_name = config["database_name"]
-    table_name = tableIndexs[tableName]
+    # table_name = tableIndexs[tableName]
     dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
     dyDataFrame.createOrReplaceTempView("tmp_" + tableName + "_delete")
-    query = f"""DELETE FROM glue_catalog.{database_name}.{table_name} AS t1 where EXISTS (SELECT ID FROM tmp_{tableName}_delete WHERE t1.ID = ID)"""
+    query = f"""DELETE FROM glue_catalog.{database_name}.{tableName} AS t1 where EXISTS (SELECT ID FROM tmp_{tableName}_delete WHERE t1.ID = ID)"""
     # {"data":{"id":1,"reward":10,"channels":"['email', 'mobile', 'social']","difficulty":"10","duration":"7","offer_type":"bogo","offer_id":"ae264e3637204a6fb9bb56bc8210ddfd"},"op":"+I"}
     spark.sql(query)
 # Script generated for node Apache Kafka

@@ -27,17 +27,17 @@ config = {
 }
 
 #源表对应iceberg目标表（多表处理）
-tableIndexs = {
-    "portfolio": "iceberg_portfolio_10",
-    "portfolio_02": "portfolio_02",
-    "table02": "table02",
-    "table01": "table01",
-    "user_order_list_small_file": "user_order_list_small_file",
-    "user_order_list": "user_order_list",
-    "user_order_main": "user_order_main",
-    "user_order_mor": "user_order_mor",
-    "tb_schema_evolution": "tb_schema_evolution"
-}
+# tableIndexs = {
+#     "portfolio": "iceberg_portfolio_10",
+#     "portfolio_02": "portfolio_02",
+#     "table02": "table02",
+#     "table01": "table01",
+#     "user_order_list_small_file": "user_order_list_small_file",
+#     "user_order_list": "user_order_list",
+#     "user_order_main": "user_order_main",
+#     "user_order_mor": "user_order_mor",
+#     "tb_schema_evolution": "tb_schema_evolution"
+# }
 
 
 spark = SparkSession.builder \
@@ -183,7 +183,10 @@ def InsertDataLake(tableName,dataFrame):
 
     ###如果表不存在，创建一个空表
     # warehousepath = config['warehouse']
-    creattbsql = f"""CREATE TABLE IF NOT EXISTS glue_catalog.{database_name}.{tableName} USING iceberg """
+    TempTable = "tmp_" + tableName + "_upsert"
+    dyDataFrame.createOrReplaceTempView(TempTable)
+
+    creattbsql = f"""CREATE TABLE IF NOT EXISTS glue_catalog.{database_name}.{tableName} USING iceberg AS SELECT * FROM {TempTable} limit 0"""
     logger.info("####### IF table not exists, create it:" + creattbsql)
     spark.sql(creattbsql)
 

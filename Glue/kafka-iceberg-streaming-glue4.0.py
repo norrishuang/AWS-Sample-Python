@@ -62,7 +62,7 @@ logger.info("Init...")
 output_path = "s3://myemr-bucket-01/data/"
 job_time_string = datetime.now().strftime("%Y%m%d%")
 s3_target = output_path + job_time_string
-checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "20230409-01" + "/"
+checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "20230409-02" + "/"
 
 additional_options = {}
 # 把 dataframe 转换成字符串，在logger中输出

@@ -1,5 +1,5 @@
 import sys
-from awsglue.transforms import *
+
 from awsglue.utils import getResolvedOptions
 from pyspark.sql.session import SparkSession
 from awsglue.context import GlueContext
@@ -8,7 +8,7 @@ from awsglue.job import Job
 from datetime import datetime
 from awsglue import DynamicFrame
 from pyspark.sql.functions import col, from_json, schema_of_json, current_timestamp
-from pyspark.sql.types import StructType, StructField, StringType, LongType, IntegerType
+from pyspark.sql.types import StructType, StructField, StringType, LongType
 
 '''
 Glue Iceberg Test
@@ -106,14 +106,14 @@ def processBatch(data_frame,batchId):
 
             for cols in rowTables :
                 tableName = cols[1]
-                dataDF = dataInsert.select(col("after"), \
-                                           from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
+                dataDF = dataInsert.select(col("after"),
+                                           from_json(col("source").cast("string"), schemaSource).alias("SOURCE")) \
                     .filter("SOURCE.table = '" + tableName + "'")
-                dataJson = dataDF.select('after').first()
-                schemaData = schema_of_json(dataJson[0])
-                logger.info("############  Insert Into-GetSchema-FirstRow:" + dataJson[0])
+                datajson = dataDF.select('after').first()
+                schemadata = schema_of_json(datajson[0])
+                logger.info("############  Insert Into-GetSchema-FirstRow:" + datajson[0])
 
-                dataDFOutput = dataDF.select(from_json(col("after").cast("string"),schemaData).alias("DFADD")).select(col("DFADD.*"), current_timestamp().alias("ts"))
+                dataDFOutput = dataDF.select(from_json(col("after").cast("string"),schemadata).alias("DFADD")).select(col("DFADD.*"), current_timestamp().alias("ts"))
                 # logger.info("############  INSERT INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
                 InsertDataLake(tableName, dataDFOutput)
 

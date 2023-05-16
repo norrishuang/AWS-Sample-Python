@@ -26,19 +26,6 @@ config = {
     "streaming_table": "kafka_iceberg_norrisdb_01"
 }
 
-#源表对应iceberg目标表（多表处理）
-# tableIndexs = {
-#     "portfolio": "iceberg_portfolio_10",
-#     "portfolio_02": "portfolio_02",
-#     "table02": "table02",
-#     "table01": "table01",
-#     "user_order_list_small_file": "user_order_list_small_file",
-#     "user_order_list": "user_order_list",
-#     "user_order_main": "user_order_main",
-#     "user_order_mor": "user_order_mor",
-#     "tb_schema_evolution": "tb_schema_evolution"
-# }
-
 
 spark = SparkSession.builder \
     .config("spark.sql.extensions","org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
@@ -54,14 +41,14 @@ glueContext = GlueContext(spark.sparkContext)
 
 job = Job(glueContext)
 job.init(args['JOB_NAME'], args)
-logger=glueContext.get_logger()
+logger = glueContext.get_logger()
 
 logger.info("Init...")
 
 # S3 sink locations
-output_path = "s3://myemr-bucket-01/data/"
-job_time_string = datetime.now().strftime("%Y%m%d%")
-s3_target = output_path + job_time_string
+# output_path = "s3://myemr-bucket-01/data/"
+# job_time_string = datetime.now().strftime("%Y%m%d%")
+# s3_target = output_path + job_time_string
 checkpoint_location = args["TempDir"] + "/" + args['JOB_NAME'] + "/checkpoint/" + "20230409-02" + "/"
 
 additional_options = {}
@@ -72,7 +59,7 @@ def getShowString(df, n=10, truncate=True, vertical=False):
     else:
         return df._jdf.showString(n, int(truncate), vertical)
 
-def processBatch(data_frame,batchId):
+def processBatch(data_frame, batchId):
     if (data_frame.count() > 0):
         schema = StructType([
             StructField("before", StringType(), True),
@@ -86,6 +73,9 @@ def processBatch(data_frame,batchId):
         dataJsonDF = data_frame.select(from_json(col("$json$data_infer_schema$_temporary$").cast("string"), schema).alias("data")).select(col("data.*"))
         # logger.info("############  Create DataFrame  ############### \r\n" + getShowString(dataJsonDF,truncate = False))
 
+        '''
+        由于Iceberg没有主键，需要通过SQL来处理upsert的场景，需要识别CDC log中的 I/U/D 分别逻辑处理
+        '''
         dataInsert = dataJsonDF.filter("op in ('r','c') and after is not null")
         # 过滤 区分 insert upsert delete
         dataUpsert = dataJsonDF.filter("op in ('u') and after is not null")
@@ -99,7 +89,7 @@ def processBatch(data_frame,batchId):
             schemaSource = schema_of_json(sourceJson[0])
 
             # 获取多表
-            dataTables = dataInsert.select(from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
+            dataTables = dataInsert.select(from_json(col("source").cast("string"), schemaSource).alias("SOURCE")) \
                 .select(col("SOURCE.db"),col("SOURCE.table")).distinct()
             # logger.info("############  MutiTables  ############### \r\n" + getShowString(dataTables,truncate = False))
             rowTables = dataTables.collect()
@@ -119,20 +109,19 @@ def processBatch(data_frame,batchId):
 
         if(dataUpsert.count() > 0):
             #### 分离一个topics多表的问题。
-            # dataUpsert = dataUpsertDYF.toDF()
-            sourceJson = dataUpsert.select('source').first()
-            schemaSource = schema_of_json(sourceJson[0])
+            sourcejson = dataUpsert.select('source').first()
+            schemasource = schema_of_json(sourcejson[0])
 
             # 获取多表
-            dataTables = dataUpsert.select(from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
+            datatables = dataUpsert.select(from_json(col("source").cast("string"), schemasource).alias("SOURCE")) \
                 .select(col("SOURCE.db"),col("SOURCE.table")).distinct()
             # logger.info("############  MutiTables  ############### \r\n" + getShowString(dataTables,truncate = False))
-            rowTables = dataTables.collect()
+            rowtables = datatables.collect()
 
-            for cols in rowTables :
+            for cols in rowtables:
                 tableName = cols[1]
-                dataDF = dataUpsert.select(col("after"), \
-                                           from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
+                dataDF = dataUpsert.select(col("after"),
+                                           from_json(col("source").cast("string"), schemasource).alias("SOURCE")) \
                     .filter("SOURCE.table = '" + tableName + "'")
 
                 ##由于merge into schema顺序的问题，这里schema从表中获取（顺序问题待解决）
@@ -161,7 +150,7 @@ def processBatch(data_frame,batchId):
             rowTables = dataTables.collect()
             for cols in rowTables :
                 tableName = cols[1]
-                dataDF = dataDelete.select(col("before"), \
+                dataDF = dataDelete.select(col("before"),
                                            from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
                     .filter("SOURCE.table = '" + tableName + "'")
                 dataJson = dataDF.select('before').first()
@@ -184,7 +173,11 @@ def InsertDataLake(tableName,dataFrame):
     ###如果表不存在，创建一个空表
     # TempTable = "tmp_" + tableName + "_upsert"
     # dyDataFrame.createOrReplaceTempView(TempTable)
-    ###从空表create一次，解决在writeto的时候，空表没有字段的问题。
+    '''
+    从空表create一次，解决在 writeto 的时候，空表没有字段的问题。
+    write.spark.accept-any-schema 用于在写入DataFrame时，Spark可以自适应字段。
+    format-version 使用iceberg v2版本
+    '''
     creattbsql = f"""CREATE TABLE IF NOT EXISTS glue_catalog.{database_name}.{tableName} 
           USING iceberg 
           TBLPROPERTIES ('write.distribution-mode'='hash',
@@ -193,12 +186,11 @@ def InsertDataLake(tableName,dataFrame):
     logger.info("####### IF table not exists, create it:" + creattbsql)
     spark.sql(creattbsql)
 
-    # dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF();
     dyDataFrame.writeTo(f"glue_catalog.{database_name}.{tableName}") \
         .option("merge-schema", "true") \
-        .option("check-ordering","false").append()
+        .option("check-ordering", "false").append()
 
-def MergeIntoDataLake(tableName,dataFrame):
+def MergeIntoDataLake(tableName, dataFrame):
 
     # logger.info("##############  Func:MergeIntoDataLake [ "+ tableName +  "] ############# \r\n"
     #             + getShowString(dataFrame,truncate = False))
@@ -221,7 +213,8 @@ def DeleteDataFromDataLake(tableName,dataFrame):
     # table_name = tableIndexs[tableName]
     dyDataFrame = DynamicFrame.fromDF(dataFrame, glueContext, "from_data_frame").toDF()
     dyDataFrame.createOrReplaceTempView("tmp_" + tableName + "_delete")
-    query = f"""DELETE FROM glue_catalog.{database_name}.{tableName} AS t1 where EXISTS (SELECT ID FROM tmp_{tableName}_delete WHERE t1.ID = ID)"""
+    query = f"""DELETE FROM glue_catalog.{database_name}.{tableName} AS t1 
+        where EXISTS (SELECT ID FROM tmp_{tableName}_delete WHERE t1.ID = ID)"""
     # {"data":{"id":1,"reward":10,"channels":"['email', 'mobile', 'social']","difficulty":"10","duration":"7","offer_type":"bogo","offer_id":"ae264e3637204a6fb9bb56bc8210ddfd"},"op":"+I"}
     spark.sql(query)
 # Script generated for node Apache Kafka
@@ -239,10 +232,10 @@ dataframe_ApacheKafka_source = glueContext.create_data_frame.from_options(
     connection_options=kafka_options
 )
 
-glueContext.forEachBatch(frame = dataframe_ApacheKafka_source,
-                         batch_function = processBatch,
-                         options = {
-                             "windowSize": "10 seconds",
+glueContext.forEachBatch(frame=dataframe_ApacheKafka_source,
+                         batch_function=processBatch,
+                         options={
+                             "windowSize": "15 seconds",
                              "recordPollingLimit": "50000",
                              "checkpointLocation": checkpoint_location,
                              "batchMaxRetries": 1

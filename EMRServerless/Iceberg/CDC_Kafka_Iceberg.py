@@ -1,21 +1,44 @@
 import sys
-import os
+import time
+
 from pyspark.sql import SparkSession
 import getopt
-from pyspark.sql.functions import col, from_json, schema_of_json, current_timestamp, to_timestamp
+from pyspark.sql.functions import col, from_json, schema_of_json, to_timestamp
 from pyspark.sql.types import StructType, StructField, StringType, LongType
 from urllib.parse import urlparse
 import boto3
 import json
 
 
-job_name = "cdc-kafka-iceberg"
+'''
+Kafka（MSK Serverless） -EMR Serverless -> Iceberg -> S3
+通过消费 MSK/MSK Serverless 的数据，写S3（Iceberg）。多表，支持I U D
 
+1. 支持多表，通过MSK Connect 将数据库的数据CDC到MSK后，使用 [topics] 配置参数，可以接入多个topic的数据。
+2. 支持MSK Serverless IAM认证，需要提前在Glue Connection配置MSK的connect。MSK Connect 配置在私有子网中，私有子网配置NAT访问公网
+3. 提交参数说明
+    (1). starting_offsets_of_kafka_topic: 'latest', 'earliest'
+    (2). topics: 消费的Topic名称，如果消费多个topic，之间使用逗号分割（,）,例如 kafka1.db1.topica,kafka1.db2.topicb
+    (3). icebergdb: 数据写入的iceberg database名称
+    (4). warehouse: iceberg warehouse path
+    (5). tablejsonfile: 记录对表需要做特殊处理的配置，例如设置表的primary key，时间字段，iceberg的针对性属性配置
+    (6). mskconnect: MSK Connect 名称，用以获取MSK Serverless的数据
+    (7). checkpointpath: 记录Spark streaming的Checkpoint的地址
+    (8). region: 例如 us-east-1
+    (9). kafkaserver: MSK 的 boostrap server
+4. 只有在spark3.3版本中，才能支持iceberg的schame自适应。
+5. MSK Serverless 认证只支持IAM，因此在Kafka连接的时候需要包含IAM认证相关的代码。
+'''
+
+
+
+JOB_NAME = "cdc-kafka-iceberg"
 ## Init
 if len(sys.argv) > 1:
     opts, args = getopt.getopt(sys.argv[1:],
-                               "o:t:d:w:f:r:k:c:",
-                               ["starting_offsets_of_kafka_topic=",
+                               "j:o:t:d:w:f:r:k:c:",
+                               ["jobname=",
+                                "starting_offsets_of_kafka_topic=",
                                 "topics=",
                                 "icebergdb=",
                                 "warehouse=",
@@ -23,10 +46,13 @@ if len(sys.argv) > 1:
                                 "region=",
                                 "kafkaserver=",
                                 "checkpointpath="])
-    for opt_name,opt_value in opts:
+    for opt_name, opt_value in opts:
         if opt_name in ('-o', '--starting_offsets_of_kafka_topic'):
             STARTING_OFFSETS_OF_KAFKA_TOPIC = opt_value
             print("STARTING_OFFSETS_OF_KAFKA_TOPIC:" + STARTING_OFFSETS_OF_KAFKA_TOPIC)
+        elif opt_name in ('-j', '--jobname'):
+            JOB_NAME = opt_value
+            print("JOB_NAME:" + JOB_NAME)
         elif opt_name in ('-t', '--topics'):
             TOPICS = opt_value.replace('"', '')
             print("TOPICS:" + TOPICS)
@@ -47,7 +73,7 @@ if len(sys.argv) > 1:
             print("KAFKA_BOOSTRAPSERVER:" + KAFKA_BOOSTRAPSERVER)
         elif opt_name in ('-c', '--checkpointpath'):
             CHECKPOINT_LOCATION = opt_value
-            print("KAFKA_BOOSTRAPSERVER:" + CHECKPOINT_LOCATION)
+            print("CHECKPOINT_LOCATION:" + CHECKPOINT_LOCATION)
         else:
             print("need parameters [starting_offsets_of_kafka_topic,topics,icebergdb etc.]")
             exit()
@@ -55,15 +81,30 @@ else:
     print("Job failed. Please provided params STARTING_OFFSETS_OF_KAFKA_TOPIC,TOPICS .etc ")
     sys.exit(1)
 
+
+
 config = {
     "database_name": DATABASE_NAME,
 }
 
-checkpoint_location = CHECKPOINT_LOCATION + "/" + job_name + "/checkpoint/" + "20230517" + "/"
+checkpointpath = CHECKPOINT_LOCATION + "/" + JOB_NAME + "/checkpoint/" + "20230519" + "/"
 
-os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0 pyspark-shell'
+# os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0 pyspark-shell'
 
-spark = SparkSession.builder.config('spark.scheduler.mode', 'FAIR').getOrCreate()
+# spark = SparkSession.builder.config('spark.scheduler.mode', 'FAIR').getOrCreate()
+
+spark = SparkSession.builder \
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+    .config("spark.sql.catalog.glue_catalog", "org.apache.iceberg.spark.SparkCatalog") \
+    .config("spark.sql.catalog.glue_catalog.warehouse", WAREHOUSE) \
+    .config("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog") \
+    .config("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO") \
+    .config("spark.sql.ansi.enabled", "false") \
+    .config("spark.sql.iceberg.handle-timestamp-without-timezone", True) \
+    .getOrCreate()
+
+# spark = StreamingContext(sc)
+
 sc = spark.sparkContext
 log4j = sc._jvm.org.apache.log4j
 logger = log4j.LogManager.getLogger(__name__)
@@ -71,11 +112,11 @@ logger = log4j.LogManager.getLogger(__name__)
 kafka_options = {
     "kafka.bootstrap.servers": KAFKA_BOOSTRAPSERVER,
     "subscribe": TOPICS,
-    "kafka.consumer.commit.groupid": "group-" + job_name,
+    "kafka.consumer.commit.groupid": "group-" + JOB_NAME,
     "inferSchema": "true",
     "classification": "json",
     "failOnDataLoss": "false",
-    "maxOffsetsPerTrigger": 1000,
+    "maxOffsetsPerTrigger": 10000,
     "startingOffsets": STARTING_OFFSETS_OF_KAFKA_TOPIC,
     "kafka.security.protocol": "SASL_SSL",
     "kafka.sasl.mechanism": "AWS_MSK_IAM",
@@ -85,7 +126,7 @@ kafka_options = {
 
 
 def writeJobLogger(logs):
-    logger.info(job_name + " [CUSTOM-LOG]:{0}".format(logs))
+    logger.info(JOB_NAME + " [CUSTOM-LOG]:{0}".format(logs))
 
 def getShowString(df, n=10, truncate=True, vertical=False):
     if isinstance(truncate, bool) and truncate:
@@ -120,10 +161,11 @@ kafka_data = reader.load()
 
 source_data = kafka_data.selectExpr("CAST(value AS STRING)")
 
-def processBatch(data_frame, batchId):
-    if (data_frame.count() > 0):
+def processBatch(data_frame_batch, batchId):
+    if (data_frame_batch.count() > 0):
 
-        sparkprocess = data_frame.sparkSession
+        data_frame = data_frame_batch.cache()
+
         schema = StructType([
             StructField("before", StringType(), True),
             StructField("after", StringType(), True),
@@ -133,7 +175,7 @@ def processBatch(data_frame, batchId):
             StructField("transaction", StringType(), True)
         ])
 
-        writeJobLogger("############  Source Data from Kafka  ############### \r\n" + getShowString(data_frame,truncate = False))
+        writeJobLogger("############  Source Data from Kafka Batch[{}]  ############### \r\n {}".format(str(batchId),getShowString(data_frame,truncate = False)))
 
         dataJsonDF = data_frame.select(from_json(col("value").cast("string"), schema).alias("data")).select(col("data.*"))
         writeJobLogger("############  Create DataFrame  ############### \r\n" + getShowString(dataJsonDF, truncate=False))
@@ -201,7 +243,12 @@ def processBatch(data_frame, batchId):
                 ##由于merge into schema顺序的问题，这里schema从表中获取（顺序问题待解决）
                 database_name = config["database_name"]
 
-                schemadata = sparkprocess.table(f"glue_catalog.{database_name}.{tableName}").schema
+                refreshtable = True
+                if refreshtable:
+                    spark.sql(f"REFRESH TABLE glue_catalog.{database_name}.{tableName}")
+                    writeJobLogger("Refresh table - True")
+
+                schemadata = spark.table(f"glue_catalog.{database_name}.{tableName}").schema
                 # datajson = dataDF.select('after').first()
                 # schemadata = schema_of_json(datajson[0])
                 print(schemadata)
@@ -268,7 +315,7 @@ def InsertDataLake(tableName, dataFrame):
                 dataFrame = dataFrame.withColumn(cols.name, to_timestamp(col(cols.name)))
                 writeJobLogger("Covert time type-Column:" + cols.name)
 
-    dyDataFrame = dataFrame.repartition(4, col("id"))
+    #dyDataFrame = dataFrame.repartition(4, col("id"))
 
     creattbsql = f"""CREATE TABLE IF NOT EXISTS glue_catalog.{database_name}.{tableName} 
           USING iceberg 
@@ -284,24 +331,27 @@ def InsertDataLake(tableName, dataFrame):
     writeJobLogger("####### IF table not exists, create it:" + creattbsql)
     spark.sql(creattbsql)
 
-    dyDataFrame.writeTo(f"glue_catalog.{database_name}.{tableName}") \
+    dataFrame.writeTo(f"glue_catalog.{database_name}.{tableName}") \
         .option("merge-schema", "true") \
         .option("check-ordering", "false").append()
 
 def MergeIntoDataLake(tableName, dataFrame, batchId):
 
-    ## 待研究问题：为什么需要通过DF 才能获取到当前会话的sparkSession
-    sparkDF = dataFrame.sparkSession
-
     database_name = config["database_name"]
     primary_key = 'ID'
     timestamp_fields = ''
+    precombine_key = ''
     for item in tables_ds:
         if item['db'] == database_name and item['table'] == tableName:
-            primary_key = item['primary_key']
-            if 'timestamp.fields' in item :
+            if 'primary_key' in item:
+                primary_key = item['primary_key']
+            if 'precombine_key' in item:
+                precombine_key = item['precombine_key']
+            if 'timestamp.fields' in item:
                 timestamp_fields = item['timestamp.fields']
 
+
+    # dataMergeFrame = spark.range(1)
     if timestamp_fields != '':
         ##Timestamp字段转换
         for cols in dataFrame.schema:
@@ -309,22 +359,45 @@ def MergeIntoDataLake(tableName, dataFrame, batchId):
                 dataFrame = dataFrame.withColumn(cols.name, to_timestamp(col(cols.name)))
                 writeJobLogger("Covert time type-Column:" + cols.name)
 
-    TempTable = "tmp_" + tableName + "_upsert_" + str(batchId)
-    dataFrame.createOrReplaceTempView(TempTable)
+    writeJobLogger("############  TEMP TABLE batch {}  ############### \r\n".format(str(batchId)) + getShowString(dataFrame, truncate=False))
+    t = time.time()  # 当前时间
+    ts = (int(round(t * 1000000)))  # 微秒级时间戳
+    TempTable = "tmp_" + tableName + "_u_" + str(batchId) + "_" + str(ts)
+    dataFrame.createOrReplaceGlobalTempView(TempTable)
+    # # print(spark.catalog.listCatalogs())
+    # print(spark.catalog.listDatabases())
+    # print(spark.catalog.listTables())
+    # dfSelect = spark.sql(f"""select * from {TempTable}""")
+    # writeJobLogger("############  SELECT TEMP TABLE batchid{}  ############### \r\n".format(str(batchId)) + getShowString(dfSelect, truncate=False))
 
-    query = f"""MERGE INTO glue_catalog.{database_name}.{tableName} t USING (SELECT * FROM {TempTable}) u ON t.{primary_key} = u.{primary_key}
-            WHEN MATCHED THEN UPDATE
-                SET *
-            WHEN NOT MATCHED THEN INSERT * """
+    ##dataFrame.sparkSession.sql(f"REFRESH TABLE {TempTable}")
+    # 修改为全局试图OK，为什么？
+    if precombine_key == '':
+        query = f"""MERGE INTO glue_catalog.{database_name}.{tableName} t USING (SELECT * FROM global_temp.{TempTable}) u
+            ON t.{primary_key} = u.{primary_key}
+                WHEN MATCHED THEN UPDATE
+                    SET *
+                WHEN NOT MATCHED THEN INSERT * """
+    else:
+        query = f"""MERGE INTO glue_catalog.{database_name}.{tableName} t USING 
+        (SELECT a.* FROM global_temp.{TempTable} a join (SELECT {primary_key},max({precombine_key}) as {precombine_key} from global_temp.{TempTable} group by {primary_key}) b on
+            a.{primary_key} = b.{primary_key} and a.{precombine_key} = b.{precombine_key}) u
+            ON t.{primary_key} = u.{primary_key}
+                WHEN MATCHED THEN UPDATE
+                    SET *
+                WHEN NOT MATCHED THEN INSERT * """
+
     logger.info("####### Execute SQL:" + query)
     try:
-        sparkDF.sql(query)
-    except ValueError:
-        writeJobLogger("MergeIntoDataLake Unexpected error:", sys.exc_info()[0])
+        spark.sql(query)
+    except Exception as err:
+        logger.error("Error of MERGE INTO")
+        logger.error(err)
+        pass
+    spark.catalog.dropGlobalTempView(TempTable)
 
 
 def DeleteDataFromDataLake(tableName, dataFrame, batchId):
-    sparkDF = dataFrame.sparkSession
 
     database_name = config["database_name"]
     primary_key = 'ID'
@@ -333,21 +406,25 @@ def DeleteDataFromDataLake(tableName, dataFrame, batchId):
             primary_key = item['primary_key']
 
     database_name = config["database_name"]
-    TempTable = "tmp_" + tableName + "_upsert_" + str(batchId)
-    dataFrame.createOrReplaceTempView(TempTable)
+    t = time.time()  # 当前时间
+    ts = (int(round(t * 1000000)))  # 微秒级时间戳
+    TempTable = "tmp_" + tableName + "_d_" + str(batchId) + "_" + str(ts)
+    dataFrame.createOrReplaceGlobalTempView(TempTable)
     query = f"""DELETE FROM glue_catalog.{database_name}.{tableName} AS t1 
-         where EXISTS (SELECT {primary_key} FROM {TempTable} WHERE t1.{primary_key} = {primary_key})"""
-
+         where EXISTS (SELECT {primary_key} FROM global_temp.{TempTable} WHERE t1.{primary_key} = {primary_key})"""
     try:
-        sparkDF.sql(query)
-    except ValueError:
-        writeJobLogger("DeleteDataFromDataLake Unexpected error:", sys.exc_info()[0])
+        spark.sql(query)
+    except Exception as err:
+        logger.error("Error of DELETE")
+        logger.error(err)
+        pass
+    spark.catalog.dropGlobalTempView(TempTable)
 
 source_data \
     .writeStream \
     .outputMode("append") \
-    .trigger(processingTime="30 seconds") \
+    .trigger(processingTime="60 seconds") \
     .foreachBatch(processBatch) \
-    .option("checkpointLocation", checkpoint_location) \
+    .option("checkpointLocation", checkpointpath) \
     .start()\
     .awaitTermination()

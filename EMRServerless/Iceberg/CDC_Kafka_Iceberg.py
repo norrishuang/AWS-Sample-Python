@@ -15,7 +15,7 @@ Kafka（MSK Serverless） -EMR Serverless -> Iceberg -> S3
 通过消费 MSK/MSK Serverless 的数据，写S3（Iceberg）。多表，支持I U D
 
 1. 支持多表，通过MSK Connect 将数据库的数据CDC到MSK后，使用 [topics] 配置参数，可以接入多个topic的数据。
-2. 支持MSK Serverless IAM认证，需要提前在Glue Connection配置MSK的connect。MSK Connect 配置在私有子网中，私有子网配置NAT访问公网
+2. 支持MSK Serverless IAM认证
 3. 提交参数说明
     (1). starting_offsets_of_kafka_topic: 'latest', 'earliest'
     (2). topics: 消费的Topic名称，如果消费多个topic，之间使用逗号分割（,）,例如 kafka1.db1.topica,kafka1.db2.topicb
@@ -87,7 +87,7 @@ config = {
     "database_name": DATABASE_NAME,
 }
 
-checkpointpath = CHECKPOINT_LOCATION + "/" + JOB_NAME + "/checkpoint/" + "20230519" + "/"
+checkpointpath = CHECKPOINT_LOCATION + "/" + JOB_NAME + "/checkpoint/" + "20230520" + "/"
 
 # os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0 pyspark-shell'
 
@@ -345,7 +345,7 @@ def MergeIntoDataLake(tableName, dataFrame, batchId):
         if item['db'] == database_name and item['table'] == tableName:
             if 'primary_key' in item:
                 primary_key = item['primary_key']
-            if 'precombine_key' in item:
+            if 'precombine_key' in item:# 控制一批数据中对数据做了多次修改的情况，取最新的一条记录
                 precombine_key = item['precombine_key']
             if 'timestamp.fields' in item:
                 timestamp_fields = item['timestamp.fields']

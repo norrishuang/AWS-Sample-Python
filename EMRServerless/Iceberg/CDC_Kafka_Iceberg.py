@@ -87,7 +87,7 @@ config = {
     "database_name": DATABASE_NAME,
 }
 
-checkpointpath = CHECKPOINT_LOCATION + "/" + JOB_NAME + "/checkpoint/" + "20230520" + "/"
+checkpointpath = CHECKPOINT_LOCATION + "/" + JOB_NAME + "/checkpoint/" + "20230526" + "/"
 
 # os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0 pyspark-shell'
 
@@ -214,11 +214,6 @@ def processBatch(data_frame_batch, batchId):
 
                 dataDFOutput = dataDF.select(from_json(col("after").cast("string"), schemadata).alias("DFADD")).select(col("DFADD.*"))
 
-                # for cols in dataDFOutput.schema:
-                #     if cols.name in ['created_at', 'updated_at']:
-                #         dataDFOutput = dataDFOutput.withColumn(cols.name, to_timestamp(col(cols.name)))
-                #         writeJobLogger("Covert time type-Column:" + cols.name)
-                # dataDFOutput.printSchema()
                 # logger.info("############  INSERT INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
                 InsertDataLake(tableName, dataDFOutput)
 
@@ -249,16 +244,8 @@ def processBatch(data_frame_batch, batchId):
                     writeJobLogger("Refresh table - True")
 
                 schemadata = spark.table(f"glue_catalog.{database_name}.{tableName}").schema
-                # datajson = dataDF.select('after').first()
-                # schemadata = schema_of_json(datajson[0])
                 print(schemadata)
                 dataDFOutput = dataDF.select(from_json(col("after").cast("string"), schemadata).alias("DFADD")).select(col("DFADD.*"))
-
-                ## 将时间字同步到UTC
-                # for cols in dataDFOutput.schema:
-                #     if cols.name in ['created_at', 'updated_at']:
-                #         dataDFOutput = dataDFOutput.withColumn(cols.name, to_timestamp(col(cols.name)))
-                #         writeJobLogger("Covert time type-Column:" + cols.name)
 
                 writeJobLogger("############  MERGE INTO  ############### \r\n" + getShowString(dataDFOutput, truncate=False))
                 MergeIntoDataLake(tableName, dataDFOutput, batchId)
@@ -364,14 +351,9 @@ def MergeIntoDataLake(tableName, dataFrame, batchId):
     ts = (int(round(t * 1000000)))  # 微秒级时间戳
     TempTable = "tmp_" + tableName + "_u_" + str(batchId) + "_" + str(ts)
     dataFrame.createOrReplaceGlobalTempView(TempTable)
-    # # print(spark.catalog.listCatalogs())
-    # print(spark.catalog.listDatabases())
-    # print(spark.catalog.listTables())
-    # dfSelect = spark.sql(f"""select * from {TempTable}""")
-    # writeJobLogger("############  SELECT TEMP TABLE batchid{}  ############### \r\n".format(str(batchId)) + getShowString(dfSelect, truncate=False))
 
     ##dataFrame.sparkSession.sql(f"REFRESH TABLE {TempTable}")
-    # 修改为全局试图OK，为什么？
+    # 修改为全局试图OK，为什么？[待解决]
     if precombine_key == '':
         query = f"""MERGE INTO glue_catalog.{database_name}.{tableName} t USING (SELECT * FROM global_temp.{TempTable}) u
             ON t.{primary_key} = u.{primary_key}

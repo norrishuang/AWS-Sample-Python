@@ -1,0 +1,4 @@
+[
+  {"db":"emr_icebergdb","table":"tb_user_order_list_01","primary_key":"id"},
+  {"db":"emr_icebergdb","table":"tb_user_order_list_02","primary_key":"id"}
+]

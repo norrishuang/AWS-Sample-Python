@@ -9,30 +9,12 @@ from urllib.parse import urlparse
 import boto3
 import json
 
-
 '''
-Kafka（MSK Serverless） -EMR Serverless -> Iceberg -> S3
-通过消费 MSK/MSK Serverless 的数据，写S3（Iceberg）。多表，支持I U D
-
-1. 支持多表，通过MSK Connect 将数据库的数据CDC到MSK后，使用 [topics] 配置参数，可以接入多个topic的数据。
-2. 支持MSK Serverless IAM认证
-3. 提交参数说明
-    (1). starting_offsets_of_kafka_topic: 'latest', 'earliest'
-    (2). topics: 消费的Topic名称，如果消费多个topic，之间使用逗号分割（,）,例如 kafka1.db1.topica,kafka1.db2.topicb
-    (3). icebergdb: 数据写入的iceberg database名称
-    (4). warehouse: iceberg warehouse path
-    (5). tablejsonfile: 记录对表需要做特殊处理的配置，例如设置表的primary key，时间字段，iceberg的针对性属性配置
-    (6). mskconnect: MSK Connect 名称，用以获取MSK Serverless的数据
-    (7). checkpointpath: 记录Spark streaming的Checkpoint的地址
-    (8). region: 例如 us-east-1
-    (9). kafkaserver: MSK 的 boostrap server
-4. 只有在spark3.3版本中，才能支持iceberg的schame自适应。
-5. MSK Serverless 认证只支持IAM，因此在Kafka连接的时候需要包含IAM认证相关的代码。
+MSK->EMR Serverless(Spark)->DeltaLake
 '''
+## @params: [JOB_NAME]
 
-
-
-JOB_NAME = "cdc-kafka-iceberg"
+JOB_NAME = "cdc-kafka-daltalake"
 ## Init
 if len(sys.argv) > 1:
     opts, args = getopt.getopt(sys.argv[1:],
@@ -40,7 +22,7 @@ if len(sys.argv) > 1:
                                ["jobname=",
                                 "starting_offsets_of_kafka_topic=",
                                 "topics=",
-                                "icebergdb=",
+                                "datbasename=",
                                 "warehouse=",
                                 "tablejsonfile=",
                                 "region=",
@@ -56,7 +38,7 @@ if len(sys.argv) > 1:
         elif opt_name in ('-t', '--topics'):
             TOPICS = opt_value.replace('"', '')
             print("TOPICS:" + TOPICS)
-        elif opt_name in ('-d', '--icebergdb'):
+        elif opt_name in ('-d', '--datbasename'):
             DATABASE_NAME = opt_value
             print("DATABASE_NAME:" + DATABASE_NAME)
         elif opt_name in ('-w', '--warehouse'):
@@ -75,58 +57,14 @@ if len(sys.argv) > 1:
             CHECKPOINT_LOCATION = opt_value
             print("CHECKPOINT_LOCATION:" + CHECKPOINT_LOCATION)
         else:
-            print("need parameters [starting_offsets_of_kafka_topic,topics,icebergdb etc.]")
+            print("need parameters [starting_offsets_of_kafka_topic,topics,database name etc.]")
             exit()
 else:
     print("Job failed. Please provided params STARTING_OFFSETS_OF_KAFKA_TOPIC,TOPICS .etc ")
     sys.exit(1)
 
 
-
-config = {
-    "database_name": DATABASE_NAME,
-}
-
 checkpointpath = CHECKPOINT_LOCATION + "/" + JOB_NAME + "/checkpoint/" + "20230526" + "/"
-
-spark = SparkSession.builder \
-    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
-    .config("spark.sql.catalog.glue_catalog", "org.apache.iceberg.spark.SparkCatalog") \
-    .config("spark.sql.catalog.glue_catalog.warehouse", WAREHOUSE) \
-    .config("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog") \
-    .config("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO") \
-    .config("spark.sql.ansi.enabled", "false") \
-    .config("spark.sql.iceberg.handle-timestamp-without-timezone", True) \
-    .getOrCreate()
-
-sc = spark.sparkContext
-log4j = sc._jvm.org.apache.log4j
-logger = log4j.LogManager.getLogger(__name__)
-
-kafka_options = {
-    "kafka.bootstrap.servers": KAFKA_BOOSTRAPSERVER,
-    "subscribe": TOPICS,
-    "kafka.consumer.commit.groupid": "group-" + JOB_NAME,
-    "inferSchema": "true",
-    "classification": "json",
-    "failOnDataLoss": "false",
-    "maxOffsetsPerTrigger": 10000,
-    "startingOffsets": STARTING_OFFSETS_OF_KAFKA_TOPIC,
-    "kafka.security.protocol": "SASL_SSL",
-    "kafka.sasl.mechanism": "AWS_MSK_IAM",
-    "kafka.sasl.jaas.config": "software.amazon.msk.auth.iam.IAMLoginModule required;",
-    "kafka.sasl.client.callback.handler.class": "software.amazon.msk.auth.iam.IAMClientCallbackHandler"
-}
-
-
-def writeJobLogger(logs):
-    logger.info(JOB_NAME + " [CUSTOM-LOG]:{0}".format(logs))
-
-def getShowString(df, n=10, truncate=True, vertical=False):
-    if isinstance(truncate, bool) and truncate:
-        return df._jdf.showString(n, 10, vertical)
-    else:
-        return df._jdf.showString(n, int(truncate), vertical)
 
 def load_tables_config(aws_region, config_s3_path):
     o = urlparse(config_s3_path, allow_fragments=False)
@@ -137,8 +75,50 @@ def load_tables_config(aws_region, config_s3_path):
     return json_content
 
 
+
+
 tables_ds = load_tables_config(REGION, TABLECONFFILE)
 
+##必须把 glue catalog 的设置加在代码中，不能放在外部的conf中。
+spark = SparkSession.builder \
+    .config("hive.metastore.client.factory.class", "com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .config("spark.databricks.delta.schema.autoMerge.enabled", "true") \
+    .enableHiveSupport() \
+    .getOrCreate()
+
+spark.sql("show databases").show()
+
+
+sc = spark.sparkContext
+log4j = sc._jvm.org.apache.log4j
+logger = log4j.LogManager.getLogger(__name__)
+
+def writeJobLogger(logs):
+    logger.info(JOB_NAME + " [CUSTOM-LOG]:{0}".format(logs))
+
+kafka_options = {
+    "kafka.bootstrap.servers": KAFKA_BOOSTRAPSERVER,
+    "subscribe": TOPICS,
+    "kafka.consumer.commit.groupid": "group-" + JOB_NAME,
+    "inferSchema": "true",
+    "classification": "json",
+    "failOnDataLoss": "true",
+    "maxOffsetsPerTrigger": 10000,
+    "startingOffsets": STARTING_OFFSETS_OF_KAFKA_TOPIC,
+    # "kafka.security.protocol": "SASL_SSL",
+    # "kafka.sasl.mechanism": "AWS_MSK_IAM",
+    # "kafka.sasl.jaas.config": "software.amazon.msk.auth.iam.IAMLoginModule required;",
+    # "kafka.sasl.client.callback.handler.class": "software.amazon.msk.auth.iam.IAMClientCallbackHandler"
+}
+
+# 把 dataframe 转换成字符串，在logger中输出
+def getShowString(df, n=10, truncate=True, vertical=False):
+    if isinstance(truncate, bool) and truncate:
+        return df._jdf.showString(n, 10, vertical)
+    else:
+        return df._jdf.showString(n, int(truncate), vertical)
 
 #从kafka获取数据
 reader = spark \
@@ -155,11 +135,8 @@ kafka_data = reader.load()
 
 source_data = kafka_data.selectExpr("CAST(value AS STRING)")
 
-def processBatch(data_frame_batch, batchId):
-    if (data_frame_batch.count() > 0):
-
-        data_frame = data_frame_batch.cache()
-
+def processBatch(data_frame, batchId):
+    if (data_frame.count() > 0):
         schema = StructType([
             StructField("before", StringType(), True),
             StructField("after", StringType(), True),
@@ -169,159 +146,109 @@ def processBatch(data_frame_batch, batchId):
             StructField("transaction", StringType(), True)
         ])
 
-        writeJobLogger("############  Source Data from Kafka Batch[{}]  ############### \r\n {}".format(str(batchId),getShowString(data_frame,truncate = False)))
-
         dataJsonDF = data_frame.select(from_json(col("value").cast("string"), schema).alias("data")).select(col("data.*"))
         writeJobLogger("############  Create DataFrame  ############### \r\n" + getShowString(dataJsonDF, truncate=False))
 
-        '''
-        由于Iceberg没有主键，需要通过SQL来处理upsert的场景，需要识别CDC log中的 I/U/D 分别逻辑处理
-        '''
-        dataInsert = dataJsonDF.filter("op in ('r','c') and after is not null")
-        # 过滤 区分 insert upsert delete
-        dataUpsert = dataJsonDF.filter("op in ('u') and after is not null")
+        dataIpsert = dataJsonDF.filter("op in ('c') and after is not null")
+
+        dataUpdate = dataJsonDF.filter("op in ('u','r') and after is not null")
 
         dataDelete = dataJsonDF.filter("op in ('d') and before is not null")
 
-        if(dataInsert.count() > 0):
+        if(dataIpsert.count() > 0):
             #### 分离一个topics多表的问题。
             # dataInsert = dataInsertDYF.toDF()
-            sourceJson = dataInsert.select('source').first()
+            sourceJson = dataIpsert.select('source').first()
             schemaSource = schema_of_json(sourceJson[0])
 
             # 获取多表
-            datatables = dataInsert.select(from_json(col("source").cast("string"), schemaSource).alias("SOURCE")) \
+            dataTables = dataIpsert.select(from_json(col("source").cast("string"), schemaSource).alias("SOURCE")) \
                 .select(col("SOURCE.db"), col("SOURCE.table")).distinct()
             # logger.info("############  MutiTables  ############### \r\n" + getShowString(dataTables,truncate = False))
-            rowtables = datatables.collect()
+            rowTables = dataTables.collect()
 
-            for cols in rowtables:
+            for cols in rowTables:
                 tableName = cols[1]
-                writeJobLogger("Insert Table [%],Counts[%]".format(tableName, str(dataInsert.count())))
-                dataDF = dataInsert.select(col("after"),
+                dataDF = dataIpsert.select(col("after"),
                                            from_json(col("source").cast("string"), schemaSource).alias("SOURCE")) \
                     .filter("SOURCE.table = '" + tableName + "'")
-                datajson = dataDF.select('after').first()
-                schemadata = schema_of_json(datajson[0])
-                writeJobLogger("############  Insert Into-GetSchema-FirstRow:" + datajson[0])
+                dataJson = dataDF.select('after').first()
+                schemaData = schema_of_json(dataJson[0])
+                logger.info("############  Insert Into-GetSchema-FirstRow:" + dataJson[0])
 
-                '''识别时间字段'''
-
-                dataDFOutput = dataDF.select(from_json(col("after").cast("string"), schemadata).alias("DFADD")).select(col("DFADD.*"))
-
+                dataDFOutput = dataDF.select(from_json(col("after").cast("string"), schemaData).alias("DFADD")).select(col("DFADD.*"))
                 # logger.info("############  INSERT INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
                 InsertDataLake(tableName, dataDFOutput)
 
-        if(dataUpsert.count() > 0):
+        if(dataUpdate.count() > 0):
             #### 分离一个topics多表的问题。
-            sourcejson = dataUpsert.select('source').first()
-            schemasource = schema_of_json(sourcejson[0])
+            # dataInsert = dataInsertDYF.toDF()
+            sourceJson = dataUpdate.select('source').first()
+            schemaSource = schema_of_json(sourceJson[0])
 
             # 获取多表
-            datatables = dataUpsert.select(from_json(col("source").cast("string"), schemasource).alias("SOURCE")) \
+            dataTables = dataUpdate.select(from_json(col("source").cast("string"), schemaSource).alias("SOURCE")) \
                 .select(col("SOURCE.db"), col("SOURCE.table")).distinct()
-            writeJobLogger("MERGE INTO Table Names \r\n" + getShowString(datatables, truncate=False))
-            rowtables = datatables.collect()
+            # logger.info("############  MutiTables  ############### \r\n" + getShowString(dataTables,truncate = False))
+            rowTables = dataTables.collect()
 
-            for cols in rowtables:
+            for cols in rowTables :
                 tableName = cols[1]
-                writeJobLogger("Upsert Table [%],Counts[%]".format(tableName, str(dataUpsert.count())))
-                dataDF = dataUpsert.select(col("after"),
-                                           from_json(col("source").cast("string"), schemasource).alias("SOURCE")) \
+                dataDF = dataUpdate.select(col("after"),
+                                           from_json(col("source").cast("string"), schemaSource).alias("SOURCE")) \
                     .filter("SOURCE.table = '" + tableName + "'")
+                dataJson = dataDF.select('after').first()
+                schemaData = schema_of_json(dataJson[0])
+                logger.info("############  Insert Into-GetSchema-FirstRow:" + dataJson[0])
 
-                writeJobLogger("MERGE INTO Table [" + tableName + "]\r\n" + getShowString(dataDF, truncate=False))
-                ##由于merge into schema顺序的问题，这里schema从表中获取（顺序问题待解决）
-                database_name = config["database_name"]
-
-                refreshtable = True
-                if refreshtable:
-                    spark.sql(f"REFRESH TABLE glue_catalog.{database_name}.{tableName}")
-                    writeJobLogger("Refresh table - True")
-
-                schemadata = spark.table(f"glue_catalog.{database_name}.{tableName}").schema
-                print(schemadata)
-                dataDFOutput = dataDF.select(from_json(col("after").cast("string"), schemadata).alias("DFADD")).select(col("DFADD.*"))
-
-                writeJobLogger("############  MERGE INTO  ############### \r\n" + getShowString(dataDFOutput, truncate=False))
+                dataDFOutput = dataDF.select(from_json(col("after").cast("string"), schemaData).alias("DFADD")).select(col("DFADD.*"))
+                # logger.info("############  INSERT INTO  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
                 MergeIntoDataLake(tableName, dataDFOutput, batchId)
 
-
         if(dataDelete.count() > 0):
+            # dataDelete = dataDeleteDYF.toDF()
             sourceJson = dataDelete.select('source').first()
+            # schemaData = schema_of_json([rowjson[0]])
 
             schemaSource = schema_of_json(sourceJson[0])
-            dataTables = dataDelete.select(from_json(col("source").cast("string"), schemaSource).alias("SOURCE")) \
-                .select(col("SOURCE.db"), col("SOURCE.table")).distinct()
+            dataTables = dataDelete.select(from_json(col("source").cast("string"),schemaSource).alias("SOURCE")) \
+                .select(col("SOURCE.db"),col("SOURCE.table")).distinct()
+
+            # logger.info("############  Auto Schema Recognize  ############### \r\n" + getShowString(dataDelete,truncate = False))
 
             rowTables = dataTables.collect()
-            for cols in rowTables:
+            for cols in rowTables :
                 tableName = cols[1]
-                writeJobLogger("Delete Table [%],Counts[%]".format(tableName, str(dataDelete.count())))
                 dataDF = dataDelete.select(col("before"),
-                                           from_json(col("source").cast("string"), schemaSource).alias("SOURCE")) \
+                                           from_json(col("source").cast("string"),schemaSource).alias("SOURCE"))\
                     .filter("SOURCE.table = '" + tableName + "'")
                 dataJson = dataDF.select('before').first()
 
                 schemaData = schema_of_json(dataJson[0])
                 dataDFOutput = dataDF.select(from_json(col("before").cast("string"), schemaData).alias("DFDEL")).select(col("DFDEL.*"))
-                DeleteDataFromDataLake(tableName, dataDFOutput, batchId)
+                # logger.info("############  DELETE FROM  ############### \r\n" + getShowString(dataDFOutput,truncate = False))
+                MergeIntoDataLake(tableName, dataDFOutput, batchId)
+                writeJobLogger("Add {0} records in Table:{1}".format(dataDFOutput.count(), tableName))
 
 def InsertDataLake(tableName, dataFrame):
 
-    database_name = config["database_name"]
-    # partition as id
-    ###如果表不存在，创建一个空表
-    '''
-    如果表不存在，新建。解决在 writeto 的时候，空表没有字段的问题。
-    write.spark.accept-any-schema 用于在写入 DataFrame 时，Spark可以自适应字段。
-    format-version 使用iceberg v2版本
-    '''
-    format_version = "2"
-    write_merge_mode = "copy-on-write"
-    write_update_mode = "copy-on-write"
-    write_delete_mode = "copy-on-write"
-    timestamp_fields = ""
+    database_name = DATABASE_NAME
+    logger.info("##############  Func:InputDataLake [ "+ tableName +  "] ############# \r\n"
+                + getShowString(dataFrame, truncate = False))
+    target = "{0}/{1}/{2}".format(WAREHOUSE, database_name, tableName)
 
-    for item in tables_ds:
-        if item['db'] == database_name and item['table'] == tableName:
-            format_version = item['format-version']
-            write_merge_mode = item['write.merge.mode']
-            write_update_mode = item['write.update.mode']
-            write_delete_mode = item['write.delete.mode']
-            if 'timestamp.fields' in item:
-                timestamp_fields = item['timestamp.fields']
+    ##如果表不存在，创建一张表
+    spark.sql(f"""CREATE TABLE IF NOT EXISTS {database_name}.{tableName} 
+        USING delta location
+        '{target}'""")
 
-    if timestamp_fields != "":
-        ##Timestamp字段转换
-        for cols in dataFrame.schema:
-            if cols.name in timestamp_fields:
-                dataFrame = dataFrame.withColumn(cols.name, to_timestamp(col(cols.name)))
-                writeJobLogger("Covert time type-Column:" + cols.name)
-
-    #dyDataFrame = dataFrame.repartition(4, col("id"))
-
-    creattbsql = f"""CREATE TABLE IF NOT EXISTS glue_catalog.{database_name}.{tableName} 
-          USING iceberg 
-          TBLPROPERTIES ('write.distribution-mode'='hash',
-          'format-version'='{format_version}',
-          'write.merge.mode'='{write_merge_mode}',
-          'write.update.mode'='{write_update_mode}',
-          'write.delete.mode'='{write_delete_mode}',
-          'write.metadata.delete-after-commit.enabled'='true',
-          'write.metadata.previous-versions-max'='10',
-          'write.spark.accept-any-schema'='true')"""
-
-    writeJobLogger("####### IF table not exists, create it:" + creattbsql)
-    spark.sql(creattbsql)
-
-    dataFrame.writeTo(f"glue_catalog.{database_name}.{tableName}") \
-        .option("merge-schema", "true") \
-        .option("check-ordering", "false").append()
+    dataFrame.writeTo(f"""{database_name}.{tableName}""")\
+        .option("mergeSchema", "true")\
+        .append()
 
 def MergeIntoDataLake(tableName, dataFrame, batchId):
 
-    database_name = config["database_name"]
+    database_name = DATABASE_NAME
     primary_key = 'ID'
     timestamp_fields = ''
     precombine_key = ''
@@ -334,6 +261,12 @@ def MergeIntoDataLake(tableName, dataFrame, batchId):
             if 'timestamp.fields' in item:
                 timestamp_fields = item['timestamp.fields']
 
+    '''针对 op = r 的情况'''
+    target = "{0}/{1}/{2}".format(WAREHOUSE, database_name, tableName)
+    ##如果表不存在，创建一张表
+    spark.sql(f"""CREATE TABLE IF NOT EXISTS {database_name}.{tableName} 
+        USING delta location
+        '{target}'""")
 
     # dataMergeFrame = spark.range(1)
     if timestamp_fields != '':
@@ -352,13 +285,13 @@ def MergeIntoDataLake(tableName, dataFrame, batchId):
     ##dataFrame.sparkSession.sql(f"REFRESH TABLE {TempTable}")
     # 修改为全局试图OK，为什么？[待解决]
     if precombine_key == '':
-        query = f"""MERGE INTO glue_catalog.{database_name}.{tableName} t USING (SELECT * FROM global_temp.{TempTable}) u
+        query = f"""MERGE INTO {database_name}.{tableName} t USING (SELECT * FROM global_temp.{TempTable}) u
             ON t.{primary_key} = u.{primary_key}
                 WHEN MATCHED THEN UPDATE
                     SET *
                 WHEN NOT MATCHED THEN INSERT * """
     else:
-        query = f"""MERGE INTO glue_catalog.{database_name}.{tableName} t USING 
+        query = f"""MERGE INTO {database_name}.{tableName} t USING 
         (SELECT a.* FROM global_temp.{TempTable} a join (SELECT {primary_key},max({precombine_key}) as {precombine_key} from global_temp.{TempTable} group by {primary_key}) b on
             a.{primary_key} = b.{primary_key} and a.{precombine_key} = b.{precombine_key}) u
             ON t.{primary_key} = u.{primary_key}
@@ -375,21 +308,20 @@ def MergeIntoDataLake(tableName, dataFrame, batchId):
         pass
     spark.catalog.dropGlobalTempView(TempTable)
 
-
 def DeleteDataFromDataLake(tableName, dataFrame, batchId):
 
-    database_name = config["database_name"]
+    database_name = DATABASE_NAME
     primary_key = 'ID'
     for item in tables_ds:
         if item['db'] == database_name and item['table'] == tableName:
             primary_key = item['primary_key']
 
-    database_name = config["database_name"]
+    database_name = DATABASE_NAME
     t = time.time()  # 当前时间
     ts = (int(round(t * 1000000)))  # 微秒级时间戳
     TempTable = "tmp_" + tableName + "_d_" + str(batchId) + "_" + str(ts)
     dataFrame.createOrReplaceGlobalTempView(TempTable)
-    query = f"""DELETE FROM glue_catalog.{database_name}.{tableName} AS t1 
+    query = f"""DELETE FROM {database_name}.{tableName} AS t1 
          where EXISTS (SELECT {primary_key} FROM global_temp.{TempTable} WHERE t1.{primary_key} = {primary_key})"""
     try:
         spark.sql(query)
@@ -399,11 +331,14 @@ def DeleteDataFromDataLake(tableName, dataFrame, batchId):
         pass
     spark.catalog.dropGlobalTempView(TempTable)
 
+
+# Script generated for node Apache Kafka
 source_data \
     .writeStream \
     .outputMode("append") \
     .trigger(processingTime="60 seconds") \
     .foreachBatch(processBatch) \
     .option("checkpointLocation", checkpointpath) \
-    .start()\
+    .start() \
     .awaitTermination()
+

@@ -112,10 +112,10 @@ kafka_options = {
     "failOnDataLoss": "false",
     "maxOffsetsPerTrigger": 10000,
     "startingOffsets": STARTING_OFFSETS_OF_KAFKA_TOPIC,
-    "kafka.security.protocol": "SASL_SSL",
-    "kafka.sasl.mechanism": "AWS_MSK_IAM",
-    "kafka.sasl.jaas.config": "software.amazon.msk.auth.iam.IAMLoginModule required;",
-    "kafka.sasl.client.callback.handler.class": "software.amazon.msk.auth.iam.IAMClientCallbackHandler"
+    # "kafka.security.protocol": "SASL_SSL",
+    # "kafka.sasl.mechanism": "AWS_MSK_IAM",
+    # "kafka.sasl.jaas.config": "software.amazon.msk.auth.iam.IAMLoginModule required;",
+    # "kafka.sasl.client.callback.handler.class": "software.amazon.msk.auth.iam.IAMClientCallbackHandler"
 }
 
 

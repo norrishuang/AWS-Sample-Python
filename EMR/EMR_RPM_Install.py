@@ -42,7 +42,7 @@ if __name__ == '__main__':
         ##获取 BOOTSTRAPPING 状态的节点，说明当前有新的节点正在启动
         response = client.list_instances(
             ClusterId=ClusterID,
-            InstanceStates=['BOOTSTRAPPING', 'RUNNING'],
+            InstanceStates=['BOOTSTRAPPING'],
             InstanceGroupTypes=['CORE', 'TASK']
         )
 

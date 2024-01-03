@@ -8,9 +8,9 @@ region = 'us-east-1'  # e.g. us-west-1
 service = 'es'
 credentials = boto3.Session().get_credentials()
 awsauth = AWS4Auth(credentials.access_key, credentials.secret_key, region, service, session_token=credentials.token)
-auth = ('admin', 'Amazon123!')
+auth = ('<opensearch-user>', 'opensearch-password')
 # the OpenSearch Service domain, e.g. https://search-mydomain.us-west-1.es.amazonaws.com
-host = 'search-knn-server-jgbseyuiok6tfqds2ufnqqn6s4.us-east-1.es.amazonaws.com'
+host = '<opensearch-endpoint>'
 index = 'autel-vector-index'
 type = '_doc'
 url = host + '/' + index + '/' + type

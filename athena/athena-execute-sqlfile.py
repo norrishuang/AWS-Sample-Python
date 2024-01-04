@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import csv
 import time
 import boto3
@@ -79,12 +81,12 @@ def load_sql_file(sqlpath):
         writer.writeheader()
 
     # 每一条SQL执行完成后的等待时间
-    waitingTimeSec = 30
+    waitingTimeSec = 1
     i = 0
     for root, dirs, files in os.walk(sqlpath):
         for file in sorted(files):
             sqlfilepath = os.path.join(root, file)
-            sqlfile = open(sqlfilepath, encoding='utf-8')
+            sqlfile = open(sqlfilepath, encoding='utf-8', errors='ignore')
             sqltext = sqlfile.read()
             sqlfile.close()
 
@@ -101,7 +103,7 @@ def load_sql_file(sqlpath):
                     time.sleep(waitingTimeSec)
                     i = i + 1
                     print("process:[{:d}/{:d}]".format(i, totalNum))
-            time.sleep(10)
+            time.sleep(2)
 
 
 def executeSQL(filename, sqltext):

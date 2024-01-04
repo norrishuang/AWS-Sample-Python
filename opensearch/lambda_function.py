@@ -1,13 +1,8 @@
 import boto3
 import re
-import requests
-from requests_aws4auth import AWS4Auth
 from opensearchpy import OpenSearch, helpers
 
-region = 'us-east-1'  # e.g. us-west-1
-service = 'es'
 credentials = boto3.Session().get_credentials()
-awsauth = AWS4Auth(credentials.access_key, credentials.secret_key, region, service, session_token=credentials.token)
 auth = ('<opensearch-user>', 'opensearch-password')
 # the OpenSearch Service domain, e.g. https://search-mydomain.us-west-1.es.amazonaws.com
 host = '<opensearch-endpoint>'
@@ -18,12 +13,6 @@ url = host + '/' + index + '/' + type
 headers = {"Content-Type": "application/json"}
 
 s3 = boto3.client('s3')
-
-# Regular expressions used to parse some simple log lines
-ip_pattern = re.compile('(\d+\.\d+\.\d+\.\d+)')
-time_pattern = re.compile('\[(\d+\/\w\w\w\/\d\d\d\d:\d\d:\d\d:\d\d\s-\d\d\d\d)\]')
-message_pattern = re.compile('\"(.+)\"')
-
 client = OpenSearch(
     hosts=[{'host': host, 'port': 443}],
     http_compress=True,  # enables gzip compression for request bodies
@@ -31,7 +20,6 @@ client = OpenSearch(
     verify_certs=False,
     http_auth=auth
 )
-
 
 # Lambda execution starts here
 def handler(event, context):

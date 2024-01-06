@@ -4,7 +4,7 @@ from opensearchpy import OpenSearch, helpers
 
 credentials = boto3.Session().get_credentials()
 auth = ('<opensearch-user>', 'opensearch-password')
-# the OpenSearch Service domain, e.g. https://search-mydomain.us-west-1.es.amazonaws.com
+# the OpenSearch Service domain, e.g. search-mydomain.us-west-1.es.amazonaws.com
 host = '<opensearch-endpoint>'
 index = 'autel-vector-index'
 type = '_doc'

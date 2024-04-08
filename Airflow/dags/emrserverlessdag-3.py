@@ -2,7 +2,8 @@ import os
 from datetime import datetime, timedelta
 from airflow.models import Variable
 from airflow import DAG
-from emr_serverless.operators.emr import EmrServerlessStartJobOperator
+from airflow.providers.amazon.aws.operators.emr import EmrServerlessStartJobOperator
+
 
 # Replace these with your correct values
 APPLICATION_ID = Variable.get("APPLICATION_ID")

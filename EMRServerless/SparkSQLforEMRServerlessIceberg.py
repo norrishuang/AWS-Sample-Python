@@ -54,7 +54,6 @@ if __name__ == "__main__":
         .config("spark.sql.catalog.hive_prod.uri", "thrift://" + vThriftServer + ":9083") \
         .config("spark.sql.catalog.hive_prod.type", "hive") \
         .config("spark.sql.ansi.enabled", "false") \
-        .config("spark.sql.iceberg.handle-timestamp-without-timezone", True) \
         .enableHiveSupport() \
         .getOrCreate()
     sc = spark.sparkContext

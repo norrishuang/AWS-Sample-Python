@@ -17,27 +17,12 @@ S3_BUCKET = Variable.get("S3_BUCKET")
 
 
 
-SPARKSQLFILE_1 = f"s3://{S3_BUCKET}/tpcds_2_4/q1-ctas.sql"
-SPARKSQLFILE_2 = f"s3://{S3_BUCKET}/tpcds_2_4/q2-ctas.sql"
-SPARKSQLFILE_3 = f"s3://{S3_BUCKET}/tpcds_2_4/q3-ctas.sql"
-SPARKSQLFILE_4 = f"s3://{S3_BUCKET}/tpcds_2_4/q4-ctas.sql"
-SPARKSQLFILE_5 = f"s3://{S3_BUCKET}/tpcds_2_4/q5-ctas.sql"
+SPARKSQLFILE_1 = f"s3://{S3_BUCKET}/tpcds_2_4/q1.sql"
+SPARKSQLFILE_2 = f"s3://{S3_BUCKET}/tpcds_2_4/q2.sql"
+SPARKSQLFILE_3 = f"s3://{S3_BUCKET}/tpcds_2_4/q3.sql"
+SPARKSQLFILE_4 = f"s3://{S3_BUCKET}/tpcds_2_4/q4.sql"
+SPARKSQLFILE_5 = f"s3://{S3_BUCKET}/tpcds_2_4/q5.sql"
 
-JOB_DRIVER_ARG_1 = {
-    "sparkSubmit": {
-          "entryPoint": f"s3://{S3_BUCKET}/pyspark/SparkForHiveSQL.py",
-          "entryPointArguments": ["-f", f"{SPARKSQLFILE_1}", "-s", f"{S3_BUCKET}" ,"-d", "tpcds"],
-          "sparkSubmitParameters": "--conf spark.hadoop.hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory --conf spark.driver.cores=2 --conf spark.executor.memory=4G --conf spark.driver.memory=2G --conf spark.executor.cores=2"
-        }
-}
-
-JOB_DRIVER_ARG_2 = {
-    "sparkSubmit": {
-          "entryPoint": f"s3://{S3_BUCKET}/pyspark/SparkForHiveSQL.py",
-          "entryPointArguments":["-f", f"{SPARKSQLFILE_2}", "-s", f"{S3_BUCKET}" ,"-d", "tpcds"],
-          "sparkSubmitParameters": "--conf spark.hadoop.hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory --conf spark.driver.cores=2 --conf spark.executor.memory=4G --conf spark.driver.memory=2G --conf spark.executor.cores=2"
-        }
-}
 
 JOB_DRIVER_ARG_3 = {
     "sparkSubmit": {
@@ -73,7 +58,7 @@ CONFIGURATION_OVERRIDES_ARG = {
 # [END howto_operator_emr_serverless_config]
 
 with DAG(
-    dag_id='emr_serverless_job_tpcds',
+    dag_id='emr_serverless_job_tpcds-2',
     # schedule_interval=None,
     schedule_interval='0/10 * * * *',
     start_date=datetime(2023, 11, 14),
@@ -86,25 +71,7 @@ with DAG(
     # JOB_ROLE_ARN = '{{ conn.emr_eks.extra_dejson["job_role_arn"] }}'
 
     # [START howto_operator_emr_serverless_job]
-    job_starter_1 = EmrServerlessStartJobOperator(
-        task_id="tpcds_q_1",
-        application_id=APPLICATION_ID,
-        execution_role_arn=JOB_ROLE_ARN,
-        config={"name": "TPCDS-q1"},
-        job_driver=JOB_DRIVER_ARG_1,
-        configuration_overrides=CONFIGURATION_OVERRIDES_ARG,
-        dag=dag
-    )
 
-    job_starter_2 = EmrServerlessStartJobOperator(
-        task_id="tpcds_q_2",
-        application_id=APPLICATION_ID,
-        execution_role_arn=JOB_ROLE_ARN,
-        config={"name": "TPCDS-q2"},
-        job_driver=JOB_DRIVER_ARG_2,
-        configuration_overrides=CONFIGURATION_OVERRIDES_ARG,
-        dag=dag
-    )
 
     job_starter_3 = EmrServerlessStartJobOperator(
         task_id="tpcds_q_3",
@@ -136,7 +103,5 @@ with DAG(
         dag=dag
     )
 
-    # job_starter_1 >> job_starter_2
-    # job_starter_2 >> job_starter_3
-    job_starter_2 >> job_starter_4 >> job_starter_5
+    job_starter_3 >> job_starter_4 >> job_starter_5
 # [END howto_operator_emr_serverless_job]

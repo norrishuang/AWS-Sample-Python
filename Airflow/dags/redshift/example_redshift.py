@@ -1,5 +1,5 @@
 from airflow import DAG
-from airflow.providers.amazon.aws.operators.redshift_data import RedshiftDataOperator
+# from airflow.providers.amazon.aws.operators.redshift_data import RedshiftDataOperator
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from datetime import datetime
 
@@ -13,25 +13,24 @@ with DAG(
     schema = 'public'
 
     tpcds_q3_drop = SQLExecuteQueryOperator(
-        task_id='tpcds_q3_drop',
+        task_id='tpcds_q3_truncate',
         conn_id='redshift_default',
         # region='us-east-1',
         # workgroup_name='workgroup-20240715',
         # database='tpcds_data',
         # secret_arn='arn:aws:secretsmanager:us-east-1:812046859005:secret:prod/redshift/my-serverless-6ciizA',
-        sql=f"truncate table {db}.{schema}.dws_tpcds_3",
-        show_return_value_in_logs = True
+        sql=f"truncate table {db}.{schema}.dwd_tpcds_3"
     )
 
     tpcds_q3_create = SQLExecuteQueryOperator(
-        task_id='tpcds_q3_create',
+        task_id='tpcds_q3_insert',
         conn_id='redshift_default',
         # region='us-east-1',
         # workgroup_name='workgroup-20240715',
         # database='tpcds_data',
         # secret_arn='arn:aws:secretsmanager:us-east-1:812046859005:secret:prod/redshift/my-serverless-6ciizA',
         sql=f"""
-        INSERT INTO {db}.{schema}.dws_tpcds_3 
+        INSERT INTO {db}.{schema}.dwd_tpcds_3 
         SELECT dt.d_year, item.i_brand_id brand_id, item.i_brand brand,SUM(store_sales.ss_ext_sales_price) sum_agg
          FROM  {db}.{schema}.date_dim dt,
                {db}.{schema}.store_sales,
@@ -43,32 +42,30 @@ with DAG(
          GROUP BY dt.d_year, item.i_brand, item.i_brand_id
          ORDER BY dt.d_year, sum_agg desc, brand_id
          LIMIT 100
-            """,
-        show_return_value_in_logs = True
+            """
     )
 
     tpcds_q7_drop = SQLExecuteQueryOperator(
-        task_id='tpcds_q7_drop',
+        task_id='tpcds_q7_truncate',
         conn_id='redshift_default',
         # region='us-east-1',
         # workgroup_name='workgroup-20240715',
         # database='tpcds_data',
         # secret_arn='arn:aws:secretsmanager:us-east-1:812046859005:secret:prod/redshift/my-serverless-6ciizA',
         sql=f"""
-        truncate table {db}.{schema}.dws_tpcds_7
-            """,
-        show_return_value_in_logs = True
+        truncate table {db}.{schema}.dwd_tpcds_7
+            """
     )
 
     tpcds_q7_create = SQLExecuteQueryOperator(
-        task_id='tpcds_q7_create',
+        task_id='tpcds_q7_insert',
         conn_id='redshift_default',
         # region='us-east-1',
         # workgroup_name='workgroup-20240715',
         # database='tpcds_data',
         # secret_arn='arn:aws:secretsmanager:us-east-1:812046859005:secret:prod/redshift/my-serverless-6ciizA',
         sql=f"""
-        INSERT INTO {db}.{schema}.dws_tpcds_7 
+        INSERT INTO {db}.{schema}.dwd_tpcds_7 
           SELECT item.i_item_id,
                 avg(store_sales.ss_quantity) agg1,
                 avg(store_sales.ss_list_price) agg2,
@@ -90,8 +87,7 @@ with DAG(
                d_year = 2000
          GROUP BY i_item_id
          ORDER BY i_item_id LIMIT 100
-            """,
-        show_return_value_in_logs = True
+            """
     )
 
     tpcds_q3_drop >> tpcds_q3_create >> tpcds_q7_drop >> tpcds_q7_create

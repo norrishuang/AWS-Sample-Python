@@ -9,55 +9,43 @@ def lambda_handler(event, context):
 
     def create_workshop_setup():
         nonlocal awsAccountId
-        # exists account subscription
-        response = quicksight.describe_account_subscription(
-            AwsAccountId=awsAccountId
-        )
-        accountSubscriptionStatus = response['AccountInfo']['AccountSubscriptionStatus']
-        quicksightAccountName = response['AccountInfo']['AccountName']
-
-        # print(accountSubscriptionStatus)
-        # return(True, "Get Status SUCCESS.")
-
-
-        if accountSubscriptionStatus != 'ACCOUNT_CREATED':
-            # if not craeted, to craete
-            try:
-                quicksight.create_account_subscription(
-                    Edition='ENTERPRISE',
-                    AuthenticationMethod='IAM_AND_QUICKSIGHT',
-                    AwsAccountId=awsAccountId,
-                    AccountName='QSWS-'+awsAccountId+'-'+str(int(time.time())),
-                    NotificationEmail='QSWS-'+awsAccountId+'@workshop.aws'
-                )
-                return(True, "Workshop setup initiated.")
-            except Exception as e:
-                return (False, "Error encountered: " + str(e))
-
-        # create namespace and register user
         try:
-            response = quicksight.create_namespace(
+            response = quicksight.create_account_subscription(
+                Edition='ENTERPRISE',
+                AuthenticationMethod='IAM_AND_QUICKSIGHT',
                 AwsAccountId=awsAccountId,
-                Namespace=quicksightAccountName,
-                IdentityStore='QUICKSIGHT'
+                AccountName='QSWS-'+awsAccountId+'-'+str(int(time.time())),
+                NotificationEmail='QSWS-'+awsAccountId+'@workshop.aws'
             )
-            iam = boto3.client('iam')
-            userName = iam.get_user()['User']['UserName']
-
-            # regester user to a AUTHOR_PRO
-            response = quicksight.register_user(
-                IdentityType='IAM',
-                Email=userName+'@quicksightadminworkshop.com',
-                UserRole='AUTHOR_PRO',
-                IamArn='arn:aws:iam::'+awsAccountId+':user/'+userName,
-                AwsAccountId=awsAccountId,
-                Namespace=awsAccountId,
-                UserName=userName
-            )
-            return(True, "create namespace and register user success.")
+            print("create account subscription success.")
         except Exception as e:
             return (False, "Error encountered: " + str(e))
 
+        time.sleep(10)
+        while True:
+            response = quicksight.describe_account_subscription(
+                AwsAccountId=awsAccountId
+            )
+            accountSubscriptionStatus = response['AccountInfo']['AccountSubscriptionStatus']
+            if accountSubscriptionStatus == 'ACCOUNT_CREATED':
+                break
+            time.sleep(5)
+        # create namespace and register user
+        try:
+            # regester user to a AUTHOR_PRO
+            response = quicksight.register_user(
+                IdentityType='IAM',
+                Email='demouser@quicksightadminworkshop.com',
+                UserRole='AUTHOR_PRO',
+                # IamArn='arn:aws:iam::'+awsAccountId+':role/TrialUseOnly-ContentGeneratedByGenAIDoesNotRepresentViewsOfAWS',
+                IamArn='arn:aws:iam::'+awsAccountId+':user/quicksight-admin',
+                AwsAccountId=awsAccountId,
+                Namespace='default'
+            )
+            return(True, "create namespace and register user success.")
+        except Exception as e:
+            return (False, "Register User Error encountered: " + str(e))
+        return(True, "Workshop setup initiated.")
 
     def delete_workshop_setup():
         nonlocal awsAccountId
@@ -68,7 +56,6 @@ def lambda_handler(event, context):
                 AwsAccountId=awsAccountId,
                 Namespace=userName
             )
-
 
             quicksight.update_account_settings(
                 AwsAccountId=awsAccountId,
@@ -85,6 +72,7 @@ def lambda_handler(event, context):
 
     if event['RequestType'] == 'Create':
         result, reason = create_workshop_setup()
+        print('register user')
     elif event['RequestType'] == 'Update':
         result, reason = (True, "Update method not implemented")
     elif event['RequestType'] == 'Delete':
@@ -92,6 +80,9 @@ def lambda_handler(event, context):
     else:
         result = False
         reason = "Unknown operation: " + event['RequestType']
+
+    print(result)
+    print(reason)
 
     responseData = {}
     responseData['Reason'] = reason

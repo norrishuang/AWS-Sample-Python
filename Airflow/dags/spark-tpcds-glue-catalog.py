@@ -75,7 +75,7 @@ CONFIGURATION_OVERRIDES_ARG = {
 with DAG(
     dag_id='emr_serverless_job_tpcds',
     # schedule_interval=None,
-    schedule_interval='0/10 * * * *',
+    schedule_interval='10 10 * * *',
     start_date=datetime(2023, 11, 14),
     tags=['tpcds-test'],
     catchup=False,
@@ -136,7 +136,7 @@ with DAG(
         dag=dag
     )
 
-    # job_starter_1 >> job_starter_2
-    # job_starter_2 >> job_starter_3
+    job_starter_1 >> job_starter_2
+    job_starter_2 >> job_starter_3
     job_starter_2 >> job_starter_4 >> job_starter_5
 # [END howto_operator_emr_serverless_job]

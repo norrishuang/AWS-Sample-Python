@@ -1,0 +1,452 @@
+﻿{
+  "paragraphs": [
+    {
+      "text": "%flink.ssql\nCREATE TABLE kafka_source_table (\n uuid STRING,\n user_name STRING,\n phone_number BIGINT,\n product_id INT,\n product_name STRING,\n product_type STRING,\n manufacturing_date INT,\nprice FLOAT, \nunit INT\n) with (\n'connector' = 'kafka',\n'topic' = 'my_connector_server.norrisdb.user_order_list',\n'properties.bootstrap.servers' = 'b-3.kafkacluster01.0io41x.c10.kafka.us-east-1.amazonaws.com:9092,b-1.kafkacluster01.0io41x.c10.kafka.us-east-1.amazonaws.com:9092,b-2.kafkacluster01.0io41x.c10.kafka.us-east-1.amazonaws.com:9092',\n'scan.startup.mode' = 'latest-offset',\n'properties.group.id' = 'flink-kda-test-20240910',\n'format'='debezium-json'\n);",
+      "user": "anonymous",
+      "dateUpdated": "2024-09-10T07:59:21+0000",
+      "progress": 0,
+      "config": {
+        "colWidth": 12,
+        "fontSize": 9,
+        "enabled": true,
+        "results": {},
+        "editorSetting": {
+          "language": "sql",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "editorMode": "ace/mode/sql",
+        "type": "update"
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "TEXT",
+            "data": "Table has been created.\n"
+          }
+        ]
+      },
+      "apps": [],
+      "runtimeInfos": {},
+      "progressUpdateIntervalMs": 500,
+      "jobName": "paragraph_example_create",
+      "id": "paragraph_example_create",
+      "dateCreated": "2024-09-09T14:13:00+0000",
+      "dateStarted": "2024-09-10T07:59:21+0000",
+      "dateFinished": "2024-09-10T07:59:22+0000",
+      "status": "FINISHED",
+      "focus": true,
+      "$$hashKey": "object:234"
+    },
+    {
+      "text": "%flink.ssql\nshow tables in msk_streaming_db;",
+      "user": "anonymous",
+      "dateUpdated": "2024-09-10T08:27:01+0000",
+      "progress": 0,
+      "config": {
+        "editorSetting": {
+          "language": "sql",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "colWidth": 12,
+        "editorMode": "ace/mode/sql",
+        "fontSize": 9,
+        "results": {
+          "0": {
+            "graph": {
+              "mode": "table",
+              "height": 300,
+              "optionOpen": false,
+              "setting": {
+                "table": {
+                  "tableGridState": {},
+                  "tableColumnTypeState": {
+                    "names": {
+                      "table": "string"
+                    },
+                    "updated": false
+                  },
+                  "tableOptionSpecHash": "[{\"name\":\"useFilter\",\"valueType\":\"boolean\",\"defaultValue\":false,\"widget\":\"checkbox\",\"description\":\"Enable filter for columns\"},{\"name\":\"showPagination\",\"valueType\":\"boolean\",\"defaultValue\":false,\"widget\":\"checkbox\",\"description\":\"Enable pagination for better navigation\"},{\"name\":\"showAggregationFooter\",\"valueType\":\"boolean\",\"defaultValue\":false,\"widget\":\"checkbox\",\"description\":\"Enable a footer for displaying aggregated values\"}]",
+                  "tableOptionValue": {
+                    "useFilter": false,
+                    "showPagination": false,
+                    "showAggregationFooter": false
+                  },
+                  "updated": false,
+                  "initialized": false
+                }
+              },
+              "commonSetting": {}
+            }
+          }
+        },
+        "enabled": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "TABLE",
+            "data": "table\nkafka_sink_table\nkafka_source_table\nuser_order_list\n"
+          }
+        ]
+      },
+      "apps": [],
+      "runtimeInfos": {},
+      "progressUpdateIntervalMs": 500,
+      "jobName": "paragraph_1725932897837_1828826968",
+      "id": "paragraph_1725932897837_1828826968",
+      "dateCreated": "2024-09-10T01:48:17+0000",
+      "dateStarted": "2024-09-10T08:27:02+0000",
+      "dateFinished": "2024-09-10T08:27:46+0000",
+      "status": "FINISHED",
+      "$$hashKey": "object:235"
+    },
+    {
+      "text": "%flink.ssql\nCREATE TABLE kafka_sink_table (\n    id BIGINT,\n    uuid STRING,\n    user_name STRING,\n    phone_number BIGINT,\n    product_id BIGINT,\n    product_name STRING,\n    product_type STRING,\n    manufacturing_date BIGINT,\n    price FLOAT, \n    unit BIGINT,\n    created_at TIMESTAMP_LTZ(3),\n    updated_at TIMESTAMP_LTZ(3)\n) WITH (\n  'connector' = 'kafka',\n  'topic' = 'kafka_sink_user_order_list_topic',\n  'properties.bootstrap.servers' =  'b-3.kafkacluster01.0io41x.c10.kafka.us-east-1.amazonaws.com:9092,b-1.kafkacluster01.0io41x.c10.kafka.us-east-1.amazonaws.com:9092,b-2.kafkacluster01.0io41x.c10.kafka.us-east-1.amazonaws.com:9092',\n  'properties.group.id' = 'user_order_list_sink_group',\n  'format' = 'debezium-json'\n);",
+      "user": "anonymous",
+      "dateUpdated": "2024-09-10T08:44:28+0000",
+      "progress": 0,
+      "config": {
+        "editorSetting": {
+          "language": "sql",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "colWidth": 12,
+        "editorMode": "ace/mode/sql",
+        "fontSize": 9,
+        "results": {},
+        "enabled": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "TEXT",
+            "data": "Table has been created.\n"
+          }
+        ]
+      },
+      "apps": [],
+      "runtimeInfos": {},
+      "progressUpdateIntervalMs": 500,
+      "jobName": "paragraph_1725932583127_2083213153",
+      "id": "paragraph_1725932583127_2083213153",
+      "dateCreated": "2024-09-10T01:43:03+0000",
+      "dateStarted": "2024-09-10T08:44:28+0000",
+      "dateFinished": "2024-09-10T08:44:29+0000",
+      "status": "FINISHED",
+      "$$hashKey": "object:236"
+    },
+    {
+      "text": "%flink.ssql\nCREATE TABLE user_order_list\n(\n    id BIGINT,\n    uuid STRING,\n    user_name STRING,\n    phone_number BIGINT,\n    product_id BIGINT,\n    product_name STRING,\n    product_type STRING,\n    manufacturing_date BIGINT,\n    price FLOAT,\n    unit BIGINT,\n    created_at TIMESTAMP_LTZ(3),\n    updated_at TIMESTAMP_LTZ(3),\n    PRIMARY KEY (id) NOT ENFORCED\n) WITH (\n    'connector' = 'mysql-cdc',\n    'hostname' = 'mysql-cdc-db.cghfgy0zyjlk.us-east-1.rds.amazonaws.com',\n    'port' = '3306',\n    'username' = 'admin',\n    'password' = 'Amazon123',\n    'database-name' = 'norrisdb',\n    'table-name' = 'user_order_list',\n    'scan.startup.mode' = 'earliest-offset'\n);",
+      "user": "anonymous",
+      "dateUpdated": "2024-09-10T09:11:22+0000",
+      "progress": 0,
+      "config": {
+        "editorSetting": {
+          "language": "sql",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "colWidth": 12,
+        "editorMode": "ace/mode/sql",
+        "fontSize": 9,
+        "results": {
+          "0": {
+            "graph": {
+              "mode": "table",
+              "height": 300,
+              "optionOpen": false,
+              "setting": {
+                "table": {
+                  "tableGridState": {},
+                  "tableColumnTypeState": {
+                    "names": {
+                      "table": "string"
+                    },
+                    "updated": false
+                  },
+                  "tableOptionSpecHash": "[{\"name\":\"useFilter\",\"valueType\":\"boolean\",\"defaultValue\":false,\"widget\":\"checkbox\",\"description\":\"Enable filter for columns\"},{\"name\":\"showPagination\",\"valueType\":\"boolean\",\"defaultValue\":false,\"widget\":\"checkbox\",\"description\":\"Enable pagination for better navigation\"},{\"name\":\"showAggregationFooter\",\"valueType\":\"boolean\",\"defaultValue\":false,\"widget\":\"checkbox\",\"description\":\"Enable a footer for displaying aggregated values\"}]",
+                  "tableOptionValue": {
+                    "useFilter": false,
+                    "showPagination": false,
+                    "showAggregationFooter": false
+                  },
+                  "updated": false,
+                  "initialized": false
+                }
+              },
+              "commonSetting": {}
+            }
+          }
+        },
+        "enabled": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "TEXT",
+            "data": "Table has been created.\n"
+          }
+        ]
+      },
+      "apps": [],
+      "runtimeInfos": {},
+      "progressUpdateIntervalMs": 500,
+      "jobName": "paragraph_1725932413798_1089608999",
+      "id": "paragraph_1725932413798_1089608999",
+      "dateCreated": "2024-09-10T01:40:13+0000",
+      "dateStarted": "2024-09-10T09:11:23+0000",
+      "dateFinished": "2024-09-10T09:11:23+0000",
+      "status": "FINISHED",
+      "$$hashKey": "object:237"
+    },
+    {
+      "text": "%flink.ssql\nINSERT INTO kafka_sink_table SELECT * FROM user_order_list;",
+      "user": "anonymous",
+      "dateUpdated": "2024-09-10T09:05:09+0000",
+      "progress": 0,
+      "config": {
+        "editorSetting": {
+          "language": "sql",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "colWidth": 12,
+        "editorMode": "ace/mode/sql",
+        "fontSize": 9,
+        "results": {},
+        "enabled": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "ERROR",
+        "msg": [
+          {
+            "type": "ANGULAR",
+            "data": "<div class='container ng-scope' style='padding-left:0px;padding-right:0px;'>\n    <div class='panel panel-danger'>\n        <div class='panel-heading' ng-click='isOpen=!isOpen' ng-init='isOpen=false' style=\"cursor:pointer\">\n            <div class='plainTextContainer' style='font-weight:bolder'><i class=\"fa fa-caret-right fa-fw\" style=\"padding-right:7px;transition:all 0.3s;{{isOpen?'transform:rotate(90deg);transform-origin:25% 45%':''}}\"></i>Unable to create a source for reading table 'hive.msk_streaming_db.user_order_list'.</div>\n            <div class='plainTextContainer' style='white-space:pre-wrap'>\nTable options are:\n\n'connector'='mysql-cdc'\n'database-name'='norrisdb'\n'hostname'='mysql-cdc-db.cghfgy0zyjlk.us-east-1.rds.amazonaws.com'\n'include-schema-changes'='true'\n'password'='******'\n'port'='3306'\n'scan.startup.mode'='earliest-offset'\n'table-name'='user_order_list'\n'username'='admin'</div>\n        </div>\n        <div class='panel-collapse' uib-collapse='!isOpen'>\n            <div class='text' style='max-height:300px;overflow:auto;padding:10px'>org.apache.flink.table.api.ValidationException: Unable to create a source for reading table 'hive.msk_streaming_db.user_order_list'.\n\nTable options are:\n\n'connector'='mysql-cdc'\n'database-name'='norrisdb'\n'hostname'='mysql-cdc-db.cghfgy0zyjlk.us-east-1.rds.amazonaws.com'\n'include-schema-changes'='true'\n'password'='******'\n'port'='3306'\n'scan.startup.mode'='earliest-offset'\n'table-name'='user_order_list'\n'username'='admin'\n\tat org.apache.flink.table.factories.FactoryUtil.createDynamicTableSource(FactoryUtil.java:159)\n\tat org.apache.flink.table.factories.FactoryUtil.createDynamicTableSource(FactoryUtil.java:184)\n\tat org.apache.flink.table.planner.plan.schema.CatalogSourceTable.createDynamicTableSource(CatalogSourceTable.java:175)\n\tat org.apache.flink.table.planner.plan.schema.CatalogSourceTable.toRel(CatalogSourceTable.java:115)\n\tat org.apache.calcite.sql2rel.SqlToRelConverter.toRel(SqlToRelConverter.java:3585)\n\tat org.apache.calcite.sql2rel.SqlToRelConverter.convertIdentifier(SqlToRelConverter.java:2507)\n\tat org.apache.calcite.sql2rel.SqlToRelConverter.convertFrom(SqlToRelConverter.java:2144)\n\tat org.apache.calcite.sql2rel.SqlToRelConverter.convertFrom(SqlToRelConverter.java:2093)\n\tat org.apache.calcite.sql2rel.SqlToRelConverter.convertFrom(SqlToRelConverter.java:2050)\n\tat org.apache.calcite.sql2rel.SqlToRelConverter.convertSelectImpl(SqlToRelConverter.java:663)\n\tat org.apache.calcite.sql2rel.SqlToRelConverter.convertSelect(SqlToRelConverter.java:644)\n\tat org.apache.calcite.sql2rel.SqlToRelConverter.convertQueryRecursive(SqlToRelConverter.java:3438)\n\tat org.apache.calcite.sql2rel.SqlToRelConverter.convertQuery(SqlToRelConverter.java:570)\n\tat org.apache.flink.table.planner.calcite.FlinkPlannerImpl.org$apache$flink$table$planner$calcite$FlinkPlannerImpl$$rel(FlinkPlannerImpl.scala:197)\n\tat org.apache.flink.table.planner.calcite.FlinkPlannerImpl.rel(FlinkPlannerImpl.scala:189)\n\tat org.apache.flink.table.planner.operations.SqlToOperationConverter.toQueryOperation(SqlToOperationConverter.java:1240)\n\tat org.apache.flink.table.planner.operations.SqlToOperationConverter.convertSqlQuery(SqlToOperationConverter.java:1188)\n\tat org.apache.flink.table.planner.operations.SqlToOperationConverter.convertValidatedSqlNode(SqlToOperationConverter.java:345)\n\tat org.apache.flink.table.planner.operations.SqlToOperationConverter.convertValidatedSqlNodeOrFail(SqlToOperationConverter.java:353)\n\tat org.apache.flink.table.planner.operations.SqlToOperationConverter.convertSqlInsert(SqlToOperationConverter.java:763)\n\tat org.apache.flink.table.planner.operations.SqlToOperationConverter.convertValidatedSqlNode(SqlToOperationConverter.java:322)\n\tat org.apache.flink.table.planner.operations.SqlToOperationConverter.convert(SqlToOperationConverter.java:238)\n\tat org.apache.flink.table.planner.delegation.ParserImpl.parse(ParserImpl.java:105)\n\tat org.apache.zeppelin.flink.Flink115SqlInterpreter.runSqlList(Flink115SqlInterpreter.java:228)\n\tat org.apache.zeppelin.flink.Flink115Shims.runSqlList(Flink115Shims.java:315)\n\tat org.apache.zeppelin.flink.FlinkStreamSqlInterpreter.runSqlList(FlinkStreamSqlInterpreter.java:103)\n\tat org.apache.zeppelin.flink.FlinkSqlInterpreter.internalInterpret(FlinkSqlInterpreter.java:63)\n\tat org.apache.zeppelin.interpreter.AbstractInterpreter.interpret(AbstractInterpreter.java:55)\n\tat org.apache.zeppelin.interpreter.LazyOpenInterpreter.interpret(LazyOpenInterpreter.java:110)\n\tat org.apache.zeppelin.interpreter.remote.RemoteInterpreterServer$InterpretJob.jobRun(RemoteInterpreterServer.java:860)\n\tat org.apache.zeppelin.interpreter.remote.RemoteInterpreterServer$InterpretJob.jobRun(RemoteInterpreterServer.java:752)\n\tat org.apache.zeppelin.scheduler.Job.run(Job.java:172)\n\tat org.apache.zeppelin.scheduler.AbstractScheduler.runJob(AbstractScheduler.java:132)\n\tat org.apache.zeppelin.scheduler.ParallelScheduler.lambda$runJobInScheduler$0(ParallelScheduler.java:46)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)\n\tat java.base/java.lang.Thread.run(Thread.java:829)\nCaused by: org.apache.flink.table.api.ValidationException: Unable to create a source for reading table 'hive.msk_streaming_db.user_order_list'.\n\nTable options are:\n\n'connector'='mysql-cdc'\n'database-name'='norrisdb'\n'hostname'='mysql-cdc-db.cghfgy0zyjlk.us-east-1.rds.amazonaws.com'\n'include-schema-changes'='true'\n'password'='******'\n'port'='3306'\n'scan.startup.mode'='earliest-offset'\n'table-name'='user_order_list'\n'username'='admin'\n\tat org.apache.flink.table.factories.FactoryUtil.createDynamicTableSource(FactoryUtil.java:159)\n\tat org.apache.flink.table.factories.FactoryUtil.createDynamicTableSource(FactoryUtil.java:184)\n\tat org.apache.flink.connectors.hive.HiveDynamicTableFactory.createDynamicTableSource(HiveDynamicTableFactory.java:111)\n\tat org.apache.flink.table.factories.FactoryUtil.createDynamicTableSource(FactoryUtil.java:156)\n\t... 36 more\nCaused by: org.apache.flink.table.api.ValidationException: Unsupported options found for 'mysql-cdc'.\n\nUnsupported options:\n\ninclude-schema-changes\n\nSupported options:\n\nchunk-key.even-distribution.factor.lower-bound\nchunk-key.even-distribution.factor.upper-bound\nchunk-meta.group.size\nconnect.max-retries\nconnect.timeout\nconnection.pool.size\nconnector\ndatabase-name\nheartbeat.interval\nhostname\npassword\nport\nproperty-version\nscan.incremental.close-idle-reader.enabled\nscan.incremental.snapshot.backfill.skip\nscan.incremental.snapshot.chunk.key-column\nscan.incremental.snapshot.chunk.size\nscan.incremental.snapshot.enabled\nscan.newly-added-table.enabled\nscan.snapshot.fetch.size\nscan.startup.mode\nscan.startup.specific-offset.file\nscan.startup.specific-offset.gtid-set\nscan.startup.specific-offset.pos\nscan.startup.specific-offset.skip-events\nscan.startup.specific-offset.skip-rows\nscan.startup.timestamp-millis\nserver-id\nserver-time-zone\nsplit-key.even-distribution.factor.lower-bound\nsplit-key.even-distribution.factor.upper-bound\ntable-name\nusername\n\tat org.apache.flink.table.factories.FactoryUtil.validateUnconsumedKeys(FactoryUtil.java:624)\n\tat org.apache.flink.table.factories.FactoryUtil$FactoryHelper.validate(FactoryUtil.java:914)\n\tat org.apache.flink.table.factories.FactoryUtil$TableFactoryHelper.validate(FactoryUtil.java:978)\n\tat org.apache.flink.table.factories.FactoryUtil$FactoryHelper.validateExcept(FactoryUtil.java:938)\n\tat org.apache.flink.table.factories.FactoryUtil$TableFactoryHelper.validateExcept(FactoryUtil.java:978)\n\tat org.apache.flink.cdc.connectors.mysql.table.MySqlTableSourceFactory.createDynamicTableSource(MySqlTableSourceFactory.java:64)\n\tat org.apache.flink.table.factories.FactoryUtil.createDynamicTableSource(FactoryUtil.java:156)\n\t... 39 more\n</div>\n        </div>\n    </div>\n</div>"
+          }
+        ]
+      },
+      "apps": [],
+      "runtimeInfos": {},
+      "progressUpdateIntervalMs": 500,
+      "jobName": "paragraph_1725932701756_2130082171",
+      "id": "paragraph_1725932701756_2130082171",
+      "dateCreated": "2024-09-10T01:45:01+0000",
+      "dateStarted": "2024-09-10T09:05:09+0000",
+      "dateFinished": "2024-09-10T09:05:10+0000",
+      "status": "ERROR",
+      "$$hashKey": "object:238"
+    },
+    {
+      "text": "%flink.ssql\nselect count(*) FROM user_order_list;",
+      "user": "anonymous",
+      "dateUpdated": "2024-09-10T08:55:16+0000",
+      "progress": 0,
+      "config": {
+        "colWidth": 12,
+        "fontSize": 9,
+        "enabled": true,
+        "results": {
+          "0": {
+            "graph": {
+              "mode": "table",
+              "height": 300,
+              "optionOpen": false,
+              "setting": {
+                "table": {
+                  "tableGridState": {},
+                  "tableColumnTypeState": {
+                    "names": {
+                      "EXPR$0": "string"
+                    },
+                    "updated": false
+                  },
+                  "tableOptionSpecHash": "[{\"name\":\"useFilter\",\"valueType\":\"boolean\",\"defaultValue\":false,\"widget\":\"checkbox\",\"description\":\"Enable filter for columns\"},{\"name\":\"showPagination\",\"valueType\":\"boolean\",\"defaultValue\":false,\"widget\":\"checkbox\",\"description\":\"Enable pagination for better navigation\"},{\"name\":\"showAggregationFooter\",\"valueType\":\"boolean\",\"defaultValue\":false,\"widget\":\"checkbox\",\"description\":\"Enable a footer for displaying aggregated values\"}]",
+                  "tableOptionValue": {
+                    "useFilter": false,
+                    "showPagination": false,
+                    "showAggregationFooter": false
+                  },
+                  "updated": false,
+                  "initialized": false
+                }
+              },
+              "commonSetting": {}
+            }
+          }
+        },
+        "editorSetting": {
+          "language": "sql",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "editorMode": "ace/mode/sql",
+        "type": "update"
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "ERROR",
+        "msg": [
+          {
+            "type": "TABLE",
+            "data": "EXPR$0\n80\n"
+          },
+          {
+            "type": "TEXT",
+            "data": "Fail to run sql command: select count(*) FROM user_order_list\n"
+          },
+          {
+            "type": "ANGULAR",
+            "data": "<div class='container ng-scope' style='padding-left:0px;padding-right:0px;'>\n    <div class='panel panel-danger'>\n        <div class='panel-heading' ng-click='isOpen=!isOpen' ng-init='isOpen=false' style=\"cursor:pointer\">\n            <div class='plainTextContainer' style='font-weight:bolder'><i class=\"fa fa-caret-right fa-fw\" style=\"padding-right:7px;transition:all 0.3s;{{isOpen?'transform:rotate(90deg);transform-origin:25% 45%':''}}\"></i>Job was cancelled.</div>\n        </div>\n        <div class='panel-collapse' uib-collapse='!isOpen'>\n            <div class='text' style='max-height:300px;overflow:auto;padding:10px'>java.lang.RuntimeException: Fail to run update type stream job\n\tat org.apache.zeppelin.flink.FlinkStreamSqlInterpreter.callInnerSelect(FlinkStreamSqlInterpreter.java:94)\n\tat org.apache.zeppelin.flink.FlinkStreamSqlInterpreter.lambda$open$0(FlinkStreamSqlInterpreter.java:49)\n\tat org.apache.zeppelin.flink.Flink115SqlInterpreter.callStreamInnerSelect(Flink115SqlInterpreter.java:451)\n\tat org.apache.zeppelin.flink.Flink115SqlInterpreter.callSelect(Flink115SqlInterpreter.java:435)\n\tat org.apache.zeppelin.flink.Flink115SqlInterpreter.callOperation(Flink115SqlInterpreter.java:290)\n\tat org.apache.zeppelin.flink.Flink115SqlInterpreter.runSqlList(Flink115SqlInterpreter.java:236)\n\tat org.apache.zeppelin.flink.Flink115Shims.runSqlList(Flink115Shims.java:315)\n\tat org.apache.zeppelin.flink.FlinkStreamSqlInterpreter.runSqlList(FlinkStreamSqlInterpreter.java:103)\n\tat org.apache.zeppelin.flink.FlinkSqlInterpreter.internalInterpret(FlinkSqlInterpreter.java:63)\n\tat org.apache.zeppelin.interpreter.AbstractInterpreter.interpret(AbstractInterpreter.java:55)\n\tat org.apache.zeppelin.interpreter.LazyOpenInterpreter.interpret(LazyOpenInterpreter.java:110)\n\tat org.apache.zeppelin.interpreter.remote.RemoteInterpreterServer$InterpretJob.jobRun(RemoteInterpreterServer.java:860)\n\tat org.apache.zeppelin.interpreter.remote.RemoteInterpreterServer$InterpretJob.jobRun(RemoteInterpreterServer.java:752)\n\tat org.apache.zeppelin.scheduler.Job.run(Job.java:172)\n\tat org.apache.zeppelin.scheduler.AbstractScheduler.runJob(AbstractScheduler.java:132)\n\tat org.apache.zeppelin.scheduler.ParallelScheduler.lambda$runJobInScheduler$0(ParallelScheduler.java:46)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)\n\tat java.base/java.lang.Thread.run(Thread.java:829)\nCaused by: java.io.IOException: Fail to run stream sql job\n\tat org.apache.zeppelin.flink.sql.AbstractStreamSqlJob.run(AbstractStreamSqlJob.java:165)\n\tat org.apache.zeppelin.flink.sql.AbstractStreamSqlJob.run(AbstractStreamSqlJob.java:109)\n\tat org.apache.zeppelin.flink.FlinkStreamSqlInterpreter.callInnerSelect(FlinkStreamSqlInterpreter.java:92)\n\t... 18 more\nCaused by: java.util.concurrent.ExecutionException: org.apache.flink.table.api.TableException: Failed to wait job finish\n\tat java.base/java.util.concurrent.CompletableFuture.reportGet(CompletableFuture.java:395)\n\tat java.base/java.util.concurrent.CompletableFuture.get(CompletableFuture.java:2005)\n\tat org.apache.flink.table.api.internal.TableResultImpl.awaitInternal(TableResultImpl.java:118)\n\tat org.apache.flink.table.api.internal.TableResultImpl.await(TableResultImpl.java:81)\n\tat org.apache.zeppelin.flink.sql.AbstractStreamSqlJob.run(AbstractStreamSqlJob.java:154)\n\t... 20 more\nCaused by: org.apache.flink.table.api.TableException: Failed to wait job finish\n\tat org.apache.flink.table.api.internal.InsertResultProvider.hasNext(InsertResultProvider.java:85)\n\tat org.apache.flink.table.api.internal.InsertResultProvider.isFirstRowReady(InsertResultProvider.java:71)\n\tat org.apache.flink.table.api.internal.TableResultImpl.lambda$awaitInternal$1(TableResultImpl.java:105)\n\tat java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1736)\n\t... 3 more\nCaused by: java.util.concurrent.ExecutionException: org.apache.flink.client.program.ProgramInvocationException: Job failed (JobID: 3c280bc9be7439ab2cb0a558490c8062)\n\tat java.base/java.util.concurrent.CompletableFuture.reportGet(CompletableFuture.java:395)\n\tat java.base/java.util.concurrent.CompletableFuture.get(CompletableFuture.java:2005)\n\tat org.apache.flink.table.api.internal.InsertResultProvider.hasNext(InsertResultProvider.java:83)\n\t... 6 more\nCaused by: org.apache.flink.client.program.ProgramInvocationException: Job failed (JobID: 3c280bc9be7439ab2cb0a558490c8062)\n\tat org.apache.flink.client.deployment.ClusterClientJobClientAdapter.lambda$getJobExecutionResult$6(ClusterClientJobClientAdapter.java:130)\n\tat java.base/java.util.concurrent.CompletableFuture$UniApply.tryFire(CompletableFuture.java:642)\n\tat java.base/java.util.concurrent.CompletableFuture.postComplete(CompletableFuture.java:506)\n\tat java.base/java.util.concurrent.CompletableFuture.complete(CompletableFuture.java:2079)\n\tat org.apache.flink.util.concurrent.FutureUtils.lambda$retryOperationWithDelay$9(FutureUtils.java:403)\n\tat java.base/java.util.concurrent.CompletableFuture.uniWhenComplete(CompletableFuture.java:859)\n\tat java.base/java.util.concurrent.CompletableFuture$UniWhenComplete.tryFire(CompletableFuture.java:837)\n\tat java.base/java.util.concurrent.CompletableFuture.postComplete(CompletableFuture.java:506)\n\tat java.base/java.util.concurrent.CompletableFuture.complete(CompletableFuture.java:2079)\n\tat org.apache.flink.client.program.rest.RestClusterClient.lambda$pollResourceAsync$26(RestClusterClient.java:708)\n\tat java.base/java.util.concurrent.CompletableFuture.uniWhenComplete(CompletableFuture.java:859)\n\tat java.base/java.util.concurrent.CompletableFuture$UniWhenComplete.tryFire(CompletableFuture.java:837)\n\tat java.base/java.util.concurrent.CompletableFuture.postComplete(CompletableFuture.java:506)\n\tat java.base/java.util.concurrent.CompletableFuture.complete(CompletableFuture.java:2079)\n\tat org.apache.flink.util.concurrent.FutureUtils.lambda$retryOperationWithDelay$9(FutureUtils.java:403)\n\tat java.base/java.util.concurrent.CompletableFuture.uniWhenComplete(CompletableFuture.java:859)\n\tat java.base/java.util.concurrent.CompletableFuture$UniWhenComplete.tryFire(CompletableFuture.java:837)\n\tat java.base/java.util.concurrent.CompletableFuture.postComplete(CompletableFuture.java:506)\n\tat java.base/java.util.concurrent.CompletableFuture.postFire(CompletableFuture.java:610)\n\tat java.base/java.util.concurrent.CompletableFuture$UniCompose.tryFire(CompletableFuture.java:1085)\n\tat java.base/java.util.concurrent.CompletableFuture$Completion.run(CompletableFuture.java:478)\n\t... 3 more\nCaused by: org.apache.flink.runtime.client.JobCancellationException: Job was cancelled.\n\tat org.apache.flink.runtime.jobmaster.JobResult.toJobExecutionResult(JobResult.java:146)\n\tat org.apache.flink.client.deployment.ClusterClientJobClientAdapter.lambda$getJobExecutionResult$6(ClusterClientJobClientAdapter.java:128)\n\t... 23 more\n</div>\n        </div>\n    </div>\n</div>\n"
+          }
+        ]
+      },
+      "apps": [],
+      "runtimeInfos": {
+        "jobUrl": {
+          "propertyName": "jobUrl",
+          "label": "FLINK JOB",
+          "tooltip": "View in Flink web UI",
+          "group": "flink",
+          "values": [
+            {
+              "jobUrl": "/flinkdashboard/#/job/3c280bc9be7439ab2cb0a558490c8062",
+              "$$hashKey": "object:4011"
+            }
+          ],
+          "interpreterSettingId": "flink"
+        }
+      },
+      "progressUpdateIntervalMs": 500,
+      "jobName": "paragraph_example_select",
+      "id": "paragraph_example_select",
+      "dateCreated": "2024-09-09T14:13:00+0000",
+      "dateStarted": "2024-09-10T08:52:15+0000",
+      "dateFinished": "2024-09-10T09:05:23+0000",
+      "status": "ABORT",
+      "$$hashKey": "object:239"
+    },
+    {
+      "text": "%flink.ssql\ndrop table user_order_list;",
+      "user": "anonymous",
+      "dateUpdated": "2024-09-10T09:11:18+0000",
+      "progress": 0,
+      "config": {
+        "editorSetting": {
+          "language": "sql",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "colWidth": 12,
+        "editorMode": "ace/mode/sql",
+        "fontSize": 9,
+        "results": {},
+        "enabled": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "TEXT",
+            "data": "Table has been dropped.\n"
+          }
+        ]
+      },
+      "apps": [],
+      "runtimeInfos": {},
+      "progressUpdateIntervalMs": 500,
+      "jobName": "paragraph_1725891962313_1132411718",
+      "id": "paragraph_1725891962313_1132411718",
+      "dateCreated": "2024-09-09T14:26:02+0000",
+      "dateStarted": "2024-09-10T09:11:18+0000",
+      "dateFinished": "2024-09-10T09:11:19+0000",
+      "status": "FINISHED",
+      "$$hashKey": "object:240"
+    },
+    {
+      "text": "%flink.ssql\n",
+      "user": "anonymous",
+      "dateUpdated": "2024-09-09T14:37:15+0000",
+      "progress": 0,
+      "config": {
+        "colWidth": 12,
+        "fontSize": 9,
+        "enabled": true,
+        "results": {},
+        "editorSetting": {
+          "language": "scala",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "editorMode": "ace/mode/scala"
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "apps": [],
+      "runtimeInfos": {},
+      "progressUpdateIntervalMs": 500,
+      "jobName": "paragraph_1725892635015_1396283487",
+      "id": "paragraph_1725892635015_1396283487",
+      "dateCreated": "2024-09-09T14:37:15+0000",
+      "status": "READY",
+      "$$hashKey": "object:241"
+    }
+  ],
+  "name": "Examples",
+  "id": "AXMZOMPAB",
+  "defaultInterpreterGroup": "flink",
+  "version": "0.9.0-rc1-kda1",
+  "noteParams": {},
+  "noteForms": {},
+  "angularObjects": {},
+  "config": {
+    "isZeppelinNotebookCronEnable": false,
+    "looknfeel": "default",
+    "personalizedMode": "false"
+  },
+  "info": {},
+  "path": "/Examples"
+}

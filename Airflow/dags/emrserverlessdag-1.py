@@ -21,8 +21,7 @@ JDBCDriver="mysql-connector-java.jar"
 # [START howto_operator_emr_serverless_config]
 JOB_DRIVER_ARG = {
     "hive": {
-            "query": f"s3://{S3_BUCKET}/script/emr-serverless-hive-trip-01.sql",
-            "parameters": f"--hivevar NUM={NUM} --hivevar HOUR={HOUR} --hivevar DT={DT} --hiveconf hive.exec.scratchdir=s3://{S3_BUCKET}/hive/scratch --hiveconf hive.metastore.warehouse.dir=s3://{S3_BUCKET}/hive/warehouse"
+            "query": f"s3://{S3_BUCKET}/script/q1-ctas.sql"
         }
 }
 
@@ -35,12 +34,14 @@ CONFIGURATION_OVERRIDES_ARG = {
                         "hive.driver.memory": "4g",
                         "hive.tez.container.size": "8192",
                         "hive.tez.cpu.vcores": "4",
-                        "hive.metastore.client.factory.class": "org.apache.hadoop.hive.ql.metadata.SessionHiveMetaStoreClientFactory",
-                        "hive.blobstore.use.output-committer": "true",
-                        "javax.jdo.option.ConnectionDriverName": f"{JDBCDriverClass}",
-                        "javax.jdo.option.ConnectionURL": f"jdbc:mysql://{MYSQLHOST}:3306/hive",
-                        "javax.jdo.option.ConnectionUserName": f"{DBUSER}",
-                        "javax.jdo.option.ConnectionPassword": f"{DBPASSWORD}"
+                        "hive.exec.scratchdir": f"s3://{S3_BUCKET}/emr-serverless-hive/hive/scratch",
+                        "hive.metastore.warehouse.dir": f"s3://{S3_BUCKET}/emr-serverless-hive/hive/warehouse",
+                        # "hive.metastore.client.factory.class": "org.apache.hadoop.hive.ql.metadata.SessionHiveMetaStoreClientFactory",
+                        "hive.blobstore.use.output-committer": "true"
+                        # "javax.jdo.option.ConnectionDriverName": f"{JDBCDriverClass}",
+                        # "javax.jdo.option.ConnectionURL": f"jdbc:mysql://{MYSQLHOST}:3306/hive",
+                        # "javax.jdo.option.ConnectionUserName": f"{DBUSER}",
+                        # "javax.jdo.option.ConnectionPassword": f"{DBPASSWORD}"
                     }
             }
         ],
@@ -53,10 +54,10 @@ CONFIGURATION_OVERRIDES_ARG = {
 # [END howto_operator_emr_serverless_config]
 
 with DAG(
-    dag_id='example_emr_serverless_job_hive_1',
+    dag_id='emrserverless-hive-tpcds-q1',
     schedule_interval=None,
-    start_date=datetime(2023, 5, 10),
-    tags=['example'],
+    start_date=datetime(2024, 9, 1),
+    tags=['tpcds','hive'],
     catchup=False,
 ) as dag:
 
@@ -71,7 +72,7 @@ with DAG(
       execution_role_arn=JOB_ROLE_ARN,
       job_driver=JOB_DRIVER_ARG,
       configuration_overrides=CONFIGURATION_OVERRIDES_ARG,
-      config={"name": "Hive-NyTaxi-CLI-From-Airflow_1"},
+      config={"name": "Hive-TPCDS"},
       retries=5,
       retry_delay=timedelta(minutes=1),
   )

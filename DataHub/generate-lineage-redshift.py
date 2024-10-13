@@ -1,8 +1,5 @@
 import argparse
-import getopt
-import sys
 
-import boto3
 import redshift_connector
 from sqllineage.runner import LineageRunner
 import datahub.emitter.mce_builder as builder
@@ -17,6 +14,9 @@ from datahub.metadata.com.linkedin.pegasus2avro.dataset import (
     UpstreamLineage,
 )
 
+## Describe [generate-lineage-redshift]
+## Create 2024-08-29
+## Generate the lineage by redshift sql
 
 def unescape_query(query):
     return bytes(query, "utf-8").decode("unicode_escape")
@@ -32,24 +32,22 @@ def fldUrn(dataType,tbl, fld):
 def parse_query(query, datahub_api_url):
     query_txt = query["query_txt"]
     try:
-        # 解析血缘
-
-        # 获取sql血缘
+        # extract lineage
+        # get lineage from sql
         result = LineageRunner(query_txt, dialect="ansi")
         print('=== print result ====')
         print(result)
 
         targetTableName = ''
-        # 获取sql中的下游表名
+        # Get downstream table name
         if len(result.target_tables) > 0:
             targetTableName = result.target_tables[0].__str__()
 
-        print('======打印列级血缘结果Begin=========')
-
+        print('======print lineage of columns Begin=========')
         # 打印列级血缘结果
         result.print_column_lineage()
 
-        print('======打印列级血缘结果End=========')
+        print('======print lineage of columns End=========')
 
         # 获取列级血缘
         lineage = result.get_column_lineage
@@ -63,32 +61,27 @@ def parse_query(query, datahub_api_url):
 
         # 遍历列级血缘
         for columnTuples in lineage():
-            # 上游list
             upStreamStrList = []
-
-            # 下游list
             downStreamStrList = []
-
-            # 逐个字段遍历
+            # get columns
             for column in columnTuples:
 
                 # 元组中最后一个元素为下游表名与字段名，其他元素为上游表名与字段名
-
                 # 遍历到最后一个元素，为下游表名与字段名
                 if columnTuples.index(column) == len(columnTuples) - 1:
                     downStreamFieldName = column.raw_name.__str__()
                     downStreamTableName = column.__str__().replace('.' + downStreamFieldName, '').__str__()
 
-                    print('下游表名：' + downStreamTableName)
-                    print('下游字段名：' + downStreamFieldName)
+                    print('DownStream Table Name:' + downStreamTableName)
+                    print('DownStream Filed Name:' + downStreamFieldName)
 
                     downStreamStrList.append(fldUrn("redshift",downStreamTableName, downStreamFieldName))
                 else:
                     upStreamFieldName = column.raw_name.__str__()
                     upStreamTableName = column.__str__().replace('.' + upStreamFieldName, '').__str__()
 
-                    print('上游表名：' + upStreamTableName)
-                    print('上游字段名：' + upStreamFieldName)
+                    print('UpStream Table Name:' + upStreamTableName)
+                    print('UpStream Filed Name:' + upStreamFieldName)
 
                     upStreamStrList.append(fldUrn("redshift",upStreamTableName, upStreamFieldName))
 
@@ -153,15 +146,7 @@ def verify_identity_and_settings(
         user,
         password,
 ):
-    # if session.region_name is None:
-    #     print(f"\n{sys.argv[0]}: error: the following arguments are required: -r/--region")
-    #     exit(1)
-    #
-    # print("\nPlease review the settings for this session.\n")
-    # print(f"  Profile: {session.profile_name}")
-    # print(f"  Region:  {session.region_name}\n")
 
-    # print_identity(session)
 
     print(f"\n  Data Hub Url: {datahub_api_url}\n")
 
@@ -255,23 +240,15 @@ def extract_queries_and_post_lineage(
         print("\n  Processing data lineage for query: {query_result['query_txt']}")
         #
 
-        parse_query(query_result['query_txt'], datahub_api_url)
+        parse_query(query_result, datahub_api_url)
 
     cursor.close()
     conn.close()
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Post Amazon Redshift data lineage to DataHub.")
-    parser.add_argument(
-        "-p",
-        "--profile",
-        help="Use a specific profile from your credential file.",
-    )
-    parser.add_argument(
-        "-r",
-        "--region",
-        help="The region to use. Overrides config/env settings.",
-    )
+
+    parser.add_argument("-l", "--datahub-api-url", help="The DataHub API url.", required=True)
 
     parser.add_argument("-n", "--host-name", help="The Amazon Redshift host name.", required=True)
 

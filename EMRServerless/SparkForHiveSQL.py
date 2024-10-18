@@ -70,6 +70,7 @@ if __name__ == "__main__":
     spark.sql(f'use {database}')
     #遍历 sqlList 执行, 需要从变量域中获取变量 format_map(vars())，因此sql中定义的变量格式 {parameter}
     for sql in sqlList:
+        sql = sql.strip(sql)
         if sql != '':
             logger.info("execsql:" + sql)
             print("execsql:" + sql)

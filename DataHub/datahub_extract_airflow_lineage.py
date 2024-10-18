@@ -10,8 +10,7 @@ from time import sleep, time
 import boto3
 import requests
 
-GLUE_LOG_GROUP_NAME = "/aws-glue/jobs/error"
-CONSOLE_TRANSPORT_TEXT = "INFO [spark-listener-group-shared] transports.ConsoleTransport "
+CONSOLE_TRANSPORT_TEXT = "{console.py:30} INFO - "
 CONSOLE_TRANSPORT_TEXT_LEN = len(CONSOLE_TRANSPORT_TEXT)
 JSON_BEGINS = "{"
 JSON_ENDS = "}"
@@ -34,6 +33,7 @@ def post_run_event(datahub_endpoint_url, run_event, parsed_run_event):
         }
         print(f"DataHub API URL:  {data_hub_url}")
         print(f"Open lineage info:  {run_event}")
+
         response = requests.post(data_hub_url, headers=headers, json=run_event)
 
         # 检查请求状态
@@ -51,14 +51,14 @@ def post_run_event(datahub_endpoint_url, run_event, parsed_run_event):
 
 
 def process_partial_run_event(
-    logs_client, datahub_endpoint_url, log_event, partial_run_event
+    logs_client, datahub_endpoint_url, log_group_name, log_event, partial_run_event
 ):
     run_event = partial_run_event
     paginator = logs_client.get_paginator("filter_log_events")
     # The RunEvent log event parts follow the first log event part.
     # Include events up to 100ms after the first part.
     page_iterator = paginator.paginate(
-        logGroupName=GLUE_LOG_GROUP_NAME,
+        logGroupName=log_group_name,
         startTime=log_event["timestamp"],
         endTime=log_event["timestamp"] + 100,
     )
@@ -84,16 +84,16 @@ def process_partial_run_event(
                     run_event += console_msg
                     parsed_run_event = json.loads(run_event)
                     post_run_event(
-                        datahub_endpoint_url=datahub_endpoint_url,
+                        datahub_endpoint_url,
                         run_event=run_event,
                         parsed_run_event=parsed_run_event,
                     )
                     return
-    if parsed_run_event is None:
-        raise RuntimeError(f"Failed to assemble data lineage parts:\n{run_event}\n")
+        if parsed_run_event is None:
+            raise RuntimeError(f"Failed to assemble data lineage parts:\n{run_event}\n")
 
 
-def process_log_event(logs_client, datahub_endpoint_url, log_event):
+def process_log_event(logs_client, datahub_endpoint_url, log_group_name, log_event):
     console_msgs = log_event["message"].split("\n")
     for console_msg in console_msgs:
         run_event_text_pos = console_msg.find(CONSOLE_TRANSPORT_TEXT)
@@ -109,14 +109,15 @@ def process_log_event(logs_client, datahub_endpoint_url, log_event):
         try:
             parsed_run_event = json.loads(run_event)
             post_run_event(
-                datahub_endpoint_url=datahub_endpoint_url,
+                datahub_endpoint_url,
                 run_event=run_event,
                 parsed_run_event=parsed_run_event,
             )
         except json.JSONDecodeError:
             process_partial_run_event(
                 logs_client=logs_client,
-                datahub_endpoint_url=datahub_endpoint_url,
+                datahub_endpoint_url = datahub_endpoint_url,
+                log_group_name=log_group_name,
                 log_event=log_event,
                 partial_run_event=run_event,
             )
@@ -130,7 +131,9 @@ def start_time_to_iso_format(timestamp):
     )
 
 
-def extract_and_post_lineage(session, datahub_endpoint_url, start_time):
+def extract_and_post_lineage(
+    session, datahub_endpoint_url, log_group_name, start_time
+):
     logs_client = session.client(service_name="logs")
     start_time_seconds = datetime.fromisoformat(start_time).timestamp()
 
@@ -141,7 +144,7 @@ def extract_and_post_lineage(session, datahub_endpoint_url, start_time):
 
             paginator = logs_client.get_paginator("filter_log_events")
             page_iterator = paginator.paginate(
-                logGroupName=GLUE_LOG_GROUP_NAME,
+                logGroupName=log_group_name,
                 filterPattern=f'"{CONSOLE_TRANSPORT_TEXT}"',
                 startTime=int(start_time_seconds * 1_000),
             )
@@ -157,6 +160,7 @@ def extract_and_post_lineage(session, datahub_endpoint_url, start_time):
                         process_log_event(
                             logs_client=logs_client,
                             datahub_endpoint_url=datahub_endpoint_url,
+                            log_group_name=log_group_name,
                             log_event=log_event,
                         )
             if not events_found:
@@ -170,38 +174,52 @@ def extract_and_post_lineage(session, datahub_endpoint_url, start_time):
         sys.exit(1)
 
 
-# def print_identity(session):
-#     # Print information about the caller's identity if the caller has
-#     # permission to call: iam.list_account_aliases, sts.get_caller_identity.
-#     try:
-#         iam_client = session.client(service_name="iam")
-#         account_alias = iam_client.list_account_aliases()["AccountAliases"][0]
-#     except Exception:
-#         account_alias = "-"
-#     try:
-#         sts_client = session.client(service_name="sts")
-#         caller_identity = sts_client.get_caller_identity()
-#         account_id = caller_identity["Account"]
-#         user_id = caller_identity["UserId"]
-#         user_arn = caller_identity["Arn"]
-#     except Exception:
-#         account_id = user_id = user_arn = "-"
-#     print("  IAM identity:\n")
-#     print(f"    Account alias: {account_alias}")
-#     print(f"    Account Id:    {account_id}")
-#     print(f"    User Id:       {user_id}")
-#     print(f"    ARN:           {user_arn}")
+def print_identity(session):
+    # Print information about the caller's identity if the caller has
+    # permission to call: iam.list_account_aliases, sts.get_caller_identity.
+    try:
+        iam_client = session.client(service_name="iam")
+        account_alias = iam_client.list_account_aliases()["AccountAliases"][0]
+    except Exception:
+        account_alias = "-"
+    try:
+        sts_client = session.client(service_name="sts")
+        caller_identity = sts_client.get_caller_identity()
+        account_id = caller_identity["Account"]
+        user_id = caller_identity["UserId"]
+        user_arn = caller_identity["Arn"]
+    except Exception:
+        account_id = user_id = user_arn = "-"
+    print("  IAM identity:\n")
+    print(f"    Account alias: {account_alias}")
+    print(f"    Account Id:    {account_id}")
+    print(f"    User Id:       {user_id}")
+    print(f"    ARN:           {user_arn}")
 
 
-def verify_identity_and_settings(datahub_endpoint_url, start_time):
+def verify_identity_and_settings(
+    session, airflow_environment_name, log_group_name, datahub_endpoint_url, start_time
+):
+    if session.region_name is None:
+        print(f"\n{sys.argv[0]}: error: the following arguments are required: -r/--region")
+        exit(1)
 
-    print("\n  Extracting AWS Glue Spark data lineage from CloudWatch:\n")
-    print(f"    Log group:  {GLUE_LOG_GROUP_NAME}")
+    print("\nPlease review the settings for this session.\n")
+    print(f"  Profile: {session.profile_name}")
+    print(f"  Region:  {session.region_name}\n")
+
+    print_identity(session)
+
+    print("\n  Extracting Apache Airflow lineage from CloudWatch:\n")
+    print(f"    Airflow environment name: {airflow_environment_name}\n")
+    print(f"    Log group:  {log_group_name}")
     start_time_iso = start_time_to_iso_format(datetime.fromisoformat(start_time).timestamp())
     print(f"    Start time: {start_time_iso}")
 
     print("\n  Posting data lineage to DataHub:\n")
-    print(f"    Datahub endpoint: {datahub_endpoint_url}")
+    print(
+        f"    Endpoint:  {datahub_endpoint_url}"
+    )
 
     user_input = input("\nAre the settings above correct? (yes/no): ")
     if not user_input.lower() == "yes":
@@ -211,8 +229,7 @@ def verify_identity_and_settings(datahub_endpoint_url, start_time):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Post OpenLineage RunEvents from AWS Glue Spark "
-        "ETL job CloudWatch logs to DataZone."
+        description="Post OpenLineage RunEvents from Apache Airflow CloudWatch logs to DataZone"
     )
     parser.add_argument(
         "-p",
@@ -224,12 +241,17 @@ def parse_arguments():
         "--region",
         help="The region to use. Overrides config/env settings.",
     )
-
+    parser.add_argument(
+        "-a",
+        "--airflow-environment-name",
+        help="The name of the Airflow environment.",
+        required=True,
+    )
     parser.add_argument(
         "-e",
         "--datahub-endpoint-url",
         help="The DataZone endpoint URL to use. Overrides the default "
-        "DataZone endpoint URL for the region.",
+             "DataZone endpoint URL for the region.",
     )
 
     default_start_time = start_time_to_iso_format(time())
@@ -246,12 +268,17 @@ def parse_arguments():
 if __name__ == "__main__":
     args = parse_arguments()
     session = boto3.Session(profile_name=args.profile, region_name=args.region)
+    log_group_name = f"airflow-{args.airflow_environment_name}-Task"
     verify_identity_and_settings(
+        session=session,
         datahub_endpoint_url=args.datahub_endpoint_url,
+        airflow_environment_name=args.airflow_environment_name,
+        log_group_name=log_group_name,
         start_time=args.start_time,
     )
     extract_and_post_lineage(
         session=session,
         datahub_endpoint_url=args.datahub_endpoint_url,
-        start_time=args.start_time
+        log_group_name=log_group_name,
+        start_time=args.start_time,
     )

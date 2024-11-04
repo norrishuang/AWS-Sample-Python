@@ -87,7 +87,60 @@ with DAG(
                d_year = 2000
          GROUP BY i_item_id
          ORDER BY i_item_id LIMIT 100
+            """)
+
+    tpcds_q13_truncate = SQLExecuteQueryOperator(
+        task_id='tpcds_q13_truncate',
+        conn_id='redshift_default',
+        # region='us-east-1',
+        # workgroup_name='workgroup-20240715',
+        # database='tpcds_data',
+        # secret_arn='arn:aws:secretsmanager:us-east-1:812046859005:secret:prod/redshift/my-serverless-6ciizA',
+        sql=f"""
+        truncate table {db}.{schema}.dwd_tpcds_13
             """
     )
 
-    tpcds_q3_drop >> tpcds_q3_create >> tpcds_q7_drop >> tpcds_q7_create
+    tpcds_q13_create = SQLExecuteQueryOperator(
+        task_id='tpcds_q13_insert',
+        conn_id='redshift_default',
+        # region='us-east-1',
+        # workgroup_name='workgroup-20240715',
+        # database='tpcds_data',
+        # secret_arn='arn:aws:secretsmanager:us-east-1:812046859005:secret:prod/redshift/my-serverless-6ciizA',
+        sql=f"""
+        INSERT INTO {db}.{schema}.dwd_tpcds_13 AS 
+                  select /* TPC-DS query91.tpl 0.13 */ 
+                    cc_call_center_id Call_Center,
+                    cc_name Call_Center_Name,
+                    cc_manager Manager,
+                    sum(cr_net_loss) Returns_Loss
+            from
+                    {db}.{schema}.call_center,
+                    {db}.{schema}.catalog_returns,
+                    {db}.{schema}.date_dim,
+                    {db}.{schema}.customer,
+                    {db}.{schema}.customer_address,
+                    {db}.{schema}.customer_demographics,
+                    {db}.{schema}.household_demographics
+            where
+                    cr_call_center_sk       = cc_call_center_sk
+            and     cr_returned_date_sk     = d_date_sk
+            and     cr_returning_customer_sk= c_customer_sk
+            and     cd_demo_sk              = c_current_cdemo_sk
+            and     hd_demo_sk              = c_current_hdemo_sk
+            and     ca_address_sk           = c_current_addr_sk
+            and     d_year                  = 2002 
+            and     d_moy                   = 11
+            and     ( (cd_marital_status       = 'M' and cd_education_status     = 'Unknown')
+                    or(cd_marital_status       = 'W' and cd_education_status     = 'Advanced Degree'))
+            and     hd_buy_potential like 'Unknown%'
+            and     ca_gmt_offset           = -6
+            group by cc_call_center_id,cc_name,cc_manager,cd_marital_status,cd_education_status
+            order by sum(cr_net_loss) desc;
+            """
+    )
+
+    tpcds_q3_drop >> tpcds_q3_create
+    tpcds_q7_drop >> tpcds_q7_create
+    tpcds_q13_truncate >> tpcds_q13_create

@@ -23,11 +23,14 @@ SPARKSQLFILE_3 = f"s3://{S3_BUCKET}/tpcds_2_4/q3-ctas.sql"
 SPARKSQLFILE_4 = f"s3://{S3_BUCKET}/tpcds_2_4/q4-ctas.sql"
 SPARKSQLFILE_5 = f"s3://{S3_BUCKET}/tpcds_2_4/q5-ctas.sql"
 
+EXECUTOR_CORE = "2"
+EXECUTOR_MEMORY = "4G"
+
 JOB_DRIVER_ARG_1 = {
     "sparkSubmit": {
           "entryPoint": f"s3://{S3_BUCKET}/pyspark/SparkForHiveSQL.py",
           "entryPointArguments": ["-f", f"{SPARKSQLFILE_1}", "-s", f"{S3_BUCKET}" ,"-d", "tpcds"],
-          "sparkSubmitParameters": "--conf spark.hadoop.hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory --conf spark.driver.cores=2 --conf spark.executor.memory=4G --conf spark.driver.memory=2G --conf spark.executor.cores=2"
+          "sparkSubmitParameters": f"--conf spark.hadoop.hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory --conf spark.driver.cores=2 --conf spark.executor.memory={EXECUTOR_MEMORY} --conf spark.driver.memory=2G --conf spark.executor.cores={EXECUTOR_CORE}"
         }
 }
 
@@ -35,7 +38,7 @@ JOB_DRIVER_ARG_2 = {
     "sparkSubmit": {
           "entryPoint": f"s3://{S3_BUCKET}/pyspark/SparkForHiveSQL.py",
           "entryPointArguments":["-f", f"{SPARKSQLFILE_2}", "-s", f"{S3_BUCKET}" ,"-d", "tpcds"],
-          "sparkSubmitParameters": "--conf spark.hadoop.hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory --conf spark.driver.cores=2 --conf spark.executor.memory=4G --conf spark.driver.memory=2G --conf spark.executor.cores=2"
+          "sparkSubmitParameters": f"--conf spark.hadoop.hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory --conf spark.driver.cores=2 --conf spark.executor.memory={EXECUTOR_MEMORY} --conf spark.driver.memory=2G --conf spark.executor.cores={EXECUTOR_CORE}"
         }
 }
 
@@ -43,7 +46,7 @@ JOB_DRIVER_ARG_3 = {
     "sparkSubmit": {
           "entryPoint": f"s3://{S3_BUCKET}/pyspark/SparkForHiveSQL.py",
           "entryPointArguments": ["-f", f"{SPARKSQLFILE_3}", "-s", f"{S3_BUCKET}", "-d", "tpcds"],
-          "sparkSubmitParameters": "--conf spark.hadoop.hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory --conf spark.driver.cores=2 --conf spark.executor.memory=4G --conf spark.driver.memory=2G --conf spark.executor.cores=2"
+          "sparkSubmitParameters": f"--conf spark.hadoop.hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory --conf spark.driver.cores=2 --conf spark.executor.memory={EXECUTOR_MEMORY} --conf spark.driver.memory=2G --conf spark.executor.cores={EXECUTOR_CORE}"
         }
 }
 
@@ -51,7 +54,7 @@ JOB_DRIVER_ARG_4 = {
     "sparkSubmit": {
           "entryPoint": f"s3://{S3_BUCKET}/pyspark/SparkForHiveSQL.py",
           "entryPointArguments": ["-f", f"{SPARKSQLFILE_4}", "-s", f"{S3_BUCKET}", "-d", "tpcds"],
-          "sparkSubmitParameters": "--conf spark.hadoop.hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory --conf spark.driver.cores=2 --conf spark.executor.memory=4G --conf spark.driver.memory=2G --conf spark.executor.cores=2"
+          "sparkSubmitParameters": f"--conf spark.hadoop.hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory --conf spark.driver.cores=2 --conf spark.executor.memory={EXECUTOR_MEMORY} --conf spark.driver.memory=2G --conf spark.executor.cores={EXECUTOR_CORE}"
         }
 }
 
@@ -59,7 +62,7 @@ JOB_DRIVER_ARG_5 = {
     "sparkSubmit": {
           "entryPoint": f"s3://{S3_BUCKET}/pyspark/SparkForHiveSQL.py",
           "entryPointArguments": ["-f", f"{SPARKSQLFILE_5}", "-s", f"{S3_BUCKET}", "-d", "tpcds"],
-          "sparkSubmitParameters": "--conf spark.hadoop.hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory --conf spark.driver.cores=2 --conf spark.executor.memory=4G --conf spark.driver.memory=2G --conf spark.executor.cores=2"
+          "sparkSubmitParameters": f"--conf spark.hadoop.hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory --conf spark.driver.cores=2 --conf spark.executor.memory={EXECUTOR_MEMORY} --conf spark.driver.memory=2G --conf spark.executor.cores={EXECUTOR_CORE}"
         }
 }
 
@@ -76,7 +79,7 @@ with DAG(
     dag_id='emr_serverless_job_tpcds',
     # schedule_interval=None,
     schedule_interval='10 10 * * *',
-    start_date=datetime(2023, 11, 14),
+    start_date=datetime(2024, 12, 1),
     tags=['tpcds-test'],
     catchup=False,
 ) as dag:

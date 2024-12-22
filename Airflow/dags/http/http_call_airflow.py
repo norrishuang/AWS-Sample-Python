@@ -1,6 +1,8 @@
 import logging
 import sys
 import time
+from datetime import datetime
+
 import boto3
 import requests
 
@@ -145,6 +147,11 @@ def trigger_dag(region, env_name, dag_name):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
+    # record the program's process time.
+    start_time = datetime.now()
+    print(f"Program started at {start_time}")
+
+    #
     # Check if the correct number of arguments is provided
     if len(sys.argv) != 4:
         logging.error("Incorrect usage. Proper format: python script_name.py {region} {env_name} {dag_name}")
@@ -174,3 +181,7 @@ if __name__ == "__main__":
         print(f"HTTP Operator result: {xcom_value}")
     else:
         print("No XCom value found for HTTP Operator")
+
+    end_time = datetime.now()
+    execution_time = end_time - start_time
+    print(f"Execution time: {execution_time}")

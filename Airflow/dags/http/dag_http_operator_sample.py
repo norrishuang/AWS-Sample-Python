@@ -1,12 +1,15 @@
+import pytz
 from airflow import DAG
 from airflow.operators.http_operator import SimpleHttpOperator
 from airflow.operators.python_operator import PythonOperator
 from datetime import datetime, timedelta
 
+from airflow.sensors.external_task import ExternalTaskSensor
+
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': datetime(2024, 12, 1),
+    'start_date': datetime(2024, 12, 3, 1,30),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -17,7 +20,8 @@ dag = DAG(
     'http_operator_example',
     default_args=default_args,
     description='A simple DAG with HTTP Operator',
-    schedule_interval=timedelta(days=1),
+    schedule_interval='35 13 * * *',
+
 )
 
 def print_response(**context):
@@ -39,5 +43,6 @@ print_task = PythonOperator(
     provide_context=True,
     dag=dag,
 )
+
 
 http_task >> print_task

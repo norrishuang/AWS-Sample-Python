@@ -16,12 +16,16 @@
 #  under the License.
 import json
 import logging
+import sys
 import boto3
 from opensearchpy import OpenSearch, helpers, AWSV4SignerAuth, RequestsHttpConnection
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+# print(sys.argv)
+text = sys.argv[1]
+# print(text)
 
 
 client = boto3.client("bedrock-runtime", region_name="us-east-1")
@@ -45,8 +49,8 @@ def generate_text_embeddings(model_id, body):
         dict: The response from the model.
     """
 
-    logger.info(
-        "Generating text emdeddings with the Cohere Embed model %s", model_id)
+    # logger.info(
+    #     "Generating text emdeddings with the Cohere Embed model %s", model_id)
 
     accept = '*/*'
     content_type = 'application/json'
@@ -60,7 +64,7 @@ def generate_text_embeddings(model_id, body):
         contentType=content_type
     )
 
-    logger.info("Successfully generated text with Cohere model %s", model_id)
+    # logger.info("Successfully generated text with Cohere model %s", model_id)
 
     return response
 
@@ -72,8 +76,8 @@ def embeding_udf(text):
     Returns:
         list: The embeddings for the text data.
     """
-    logging.basicConfig(level=logging.INFO,
-                        format="%(levelname)s: %(message)s")
+    # logging.basicConfig(level=logging.INFO,
+    #                     format="%(levelname)s: %(message)s")
 
     model_id = 'cohere.embed-english-v3'
     input_type = "search_document"
@@ -99,14 +103,15 @@ def embeding_udf(text):
 
     return response_body.get('embeddings').get('float')[0]
 
-ret = embeding_udf("The quick brown fox jumps over the lazy dog")
+ret = embeding_udf(text)
 
-print(ret)
+# print(ret)
 
 # OpenSearch Serverless
 # Query
 region = 'us-east-1'
 service = 'aoss'
+
 auth = AWSV4SignerAuth(credentials, region, service)
 host = 'l68ddj9016h1umymg6lf.us-east-1.aoss.amazonaws.com'
 opensearch_client = OpenSearch(
@@ -134,4 +139,4 @@ query = {
 }
 
 response = opensearch_client.search(index="vector-index-fp16", body=query)
-print(response)
+print(response['took'])

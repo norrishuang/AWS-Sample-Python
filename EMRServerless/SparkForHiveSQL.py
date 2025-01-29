@@ -79,4 +79,4 @@ if __name__ == "__main__":
         if sql != '':
             logger.info("execsql:" + sql)
             print("execsql:" + sql)
-            spark.sql(sql.format_map(vars())).show()
+            spark.sql(sql.format_map(vars()))

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from airflow.models import Variable
 from airflow import DAG
 from airflow.providers.amazon.aws.operators.emr import EmrServerlessStartJobOperator
+from airflow.operators.email import EmailOperator
 
 '''
 使用 EMR Serverless 调度依赖的例子
@@ -41,6 +42,13 @@ CONFIGURATION_OVERRIDES_ARG = {
 }
 # [END howto_operator_emr_serverless_config]
 
+send_email = EmailOperator(
+    task_id='send_email',
+    to='12380647@qq.com',
+    subject='Airflow Alert',
+    html_content='<p>test email</p>',
+)
+
 with DAG(
     dag_id='emr_serverless_job_tpcds-1',
     # schedule_interval=None,
@@ -65,5 +73,5 @@ with DAG(
         dag=dag
     )
 
-    job_starter_1
+    job_starter_1 >> send_email
 # [END howto_operator_emr_serverless_job]

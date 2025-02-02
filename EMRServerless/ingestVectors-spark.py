@@ -85,17 +85,10 @@ client = boto3.client("bedrock-runtime", region_name="us-east-1")
 
 credentials = boto3.Session().get_credentials()
 
-# OpenSearch Cluster
-# auth = (OPENSEARCH_USER, OPENSEARCH_PASSWORD)
-
-
-
-
 # the OpenSearch Service domain, e.g. search-mydomain.us-west-1.es.amazonaws.com
 host = AOS_ENDPOINT
 index_insert = INSERT_INDEX
 s3_path = S3_INPUT_PATH
-
 opensearch_client = None
 
 headers = {"Content-Type": "application/json"}
@@ -105,6 +98,31 @@ spark = SparkSession.builder.appName(JOB_NAME).getOrCreate()
 
 # Read data from a file
 df = spark.read.text(s3_path)
+
+
+# Define the function to call the SageMaker endpoint
+# BGE Embedding
+def call_sagemaker_endpoint(text):
+    endpoint_name = "tei-2025-02-01-13-20-09-488"
+    region = "us-east-1"
+    runtime = boto3.client('sagemaker-runtime', region_name=region)
+
+    response = runtime.invoke_endpoint(
+        EndpointName=endpoint_name,
+        Body=json.dumps(
+            {
+                "inputs": text,
+                "is_query": True,
+                "instruction" :  "Represent this sentence for searching relevant passages:"
+            }
+        ),
+        ContentType="application/json",
+    )
+
+    json_str = response['Body'].read().decode('utf8')
+    json_obj = json.loads(json_str)
+    embeddings = json_obj[0]
+    return embeddings
 
 
 def generate_text_embeddings(model_id, body):
@@ -117,8 +135,7 @@ def generate_text_embeddings(model_id, body):
         dict: The response from the model.
     """
 
-    logger.info(
-        "Generating text emdeddings with the Cohere Embed model %s", model_id)
+    # logger.info("Generating text emdeddings with the Cohere Embed model %s", model_id)
 
     accept = '*/*'
     content_type = 'application/json'
@@ -132,10 +149,11 @@ def generate_text_embeddings(model_id, body):
         contentType=content_type
     )
 
-    logger.info("Successfully generated text with Cohere model %s", model_id)
+    # logger.info("Successfully generated text with Cohere model %s", model_id)
 
     return response
 
+# Cohere Embedding
 def embeding_udf(text):
     """
     User defined function to generate embeddings for text data.
@@ -173,20 +191,17 @@ def embeding_udf(text):
 
 df_partition = df.filter('value is not null and len(value)<=2000').limit(1000000).repartition(8)
 
-# TotalCount = df_partition.count()
-#
-# logger.info("TotalCount:" + str(TotalCount))
+# embedding_udf = spark.udf.register("embeding_udf", embeding_udf)
 
-# process_data_udf = pandas_udf(embeding_udf, returnType=StringType(), functionType=PandasUDFType.SCALAR)
+call_sagemaker_udf = spark.udf.register("call_sagemaker_endpoint", call_sagemaker_endpoint)
 
-embedding_udf = spark.udf.register("embeding_udf", embeding_udf)
 
-df_embedding = df_partition.withColumn("embedding", embedding_udf(df_partition["value"]))
+df_embedding = df_partition.withColumn("embedding", call_sagemaker_udf(df_partition["value"]))
 # df = df.limit(10)
 # Convert DataFrame to Pandas for easier handling with OpenSearch
 
-# pandas_df = df_embedding.toPandas().repartition(8)
 pandas_df = ps.DataFrame(df_embedding)
+# pandas_df = df_embedding.toPandas()
 
 if AOS_TYPE=="cluster":
     # Initialize OpenSearch client
@@ -224,11 +239,9 @@ for index, row in pandas_df.iterrows():
         "text": row["value"],
         "my_vector": json.loads(row["embedding"])
     }
-    if counts != 0:
-        bulk_docs.append(document)
+    bulk_docs.append(document)
         # r = requests.post(url, auth=awsauth, json=document, headers=headers)
         # print("request:" + r.text)
-
     counts = counts + 1
     # per 100 records bulk insert
     if counts % 100 == 0:

@@ -103,25 +103,30 @@ df = spark.read.text(s3_path)
 # Define the function to call the SageMaker endpoint
 # BGE Embedding
 def call_sagemaker_endpoint(text):
-    endpoint_name = "tei-2025-02-01-13-20-09-488"
+    endpoint_name = "tei-2025-02-02-15-18-25-267"
     region = "us-east-1"
     runtime = boto3.client('sagemaker-runtime', region_name=region)
-
+    # embeddings = None
+    # try:
+    text = text[:2000]
     response = runtime.invoke_endpoint(
-        EndpointName=endpoint_name,
-        Body=json.dumps(
-            {
-                "inputs": text,
-                "is_query": True,
-                "instruction" :  "Represent this sentence for searching relevant passages:"
-            }
-        ),
-        ContentType="application/json",
-    )
+            EndpointName=endpoint_name,
+            Body=json.dumps(
+                {
+                    "inputs": text,
+                    "is_query": True,
+                    "instruction" :  "Represent this sentence for searching relevant passages:"
+                }
+            ),
+            ContentType="application/json",
+        )
 
     json_str = response['Body'].read().decode('utf8')
     json_obj = json.loads(json_str)
     embeddings = json_obj[0]
+    # except Exception as e:
+    #     logger.error(e)
+    #     logger.error(text)
     return embeddings
 
 
@@ -189,7 +194,7 @@ def embeding_udf(text):
 
     return response_body.get('embeddings').get('float')[0]
 
-df_partition = df.filter('value is not null and len(value)<=2000').limit(1000000).repartition(8)
+df_partition = df.filter('value<>""').limit(1000000).repartition(8)
 
 # embedding_udf = spark.udf.register("embeding_udf", embeding_udf)
 
@@ -234,6 +239,7 @@ bulk_docs = []
 counts = 0
 # Index the embeddings into OpenSearch
 for index, row in pandas_df.iterrows():
+    # logger.info("value: %s", row["value"])
     document = {
         "_index": index_insert,
         "text": row["value"],

@@ -103,12 +103,12 @@ df = spark.read.text(s3_path)
 # Define the function to call the SageMaker endpoint
 # BGE Embedding
 def call_sagemaker_endpoint(text):
-    endpoint_name = "tei-2025-02-02-15-18-25-267"
+    endpoint_name = "tei-2025-02-03-13-45-11-931"
     region = "us-east-1"
     runtime = boto3.client('sagemaker-runtime', region_name=region)
     # embeddings = None
     # try:
-    text = text[:2000]
+    text = text[:512]
     response = runtime.invoke_endpoint(
             EndpointName=endpoint_name,
             Body=json.dumps(
@@ -194,14 +194,14 @@ def embeding_udf(text):
 
     return response_body.get('embeddings').get('float')[0]
 
-df_partition = df.filter('value<>""').limit(1000000).repartition(8)
+df_partition = df.filter('value<>""').limit(200000).repartition(8)
 
-# embedding_udf = spark.udf.register("embeding_udf", embeding_udf)
+embedding_udf = spark.udf.register("embeding_udf", embeding_udf)
 
-call_sagemaker_udf = spark.udf.register("call_sagemaker_endpoint", call_sagemaker_endpoint)
+# call_sagemaker_udf = spark.udf.register("call_sagemaker_endpoint", call_sagemaker_endpoint)
 
 
-df_embedding = df_partition.withColumn("embedding", call_sagemaker_udf(df_partition["value"]))
+df_embedding = df_partition.withColumn("embedding", embedding_udf(df_partition["value"]))
 # df = df.limit(10)
 # Convert DataFrame to Pandas for easier handling with OpenSearch
 
@@ -250,11 +250,11 @@ for index, row in pandas_df.iterrows():
         # print("request:" + r.text)
     counts = counts + 1
     # per 100 records bulk insert
-    if counts % 100 == 0:
+    if counts % 20 == 0:
         # print("input: %d" % counts)
         # client.bulk(bulk_docs)
         try:
-            response = helpers.bulk(opensearch_client, bulk_docs, max_retries=3)
+            response = helpers.bulk(opensearch_client, bulk_docs, max_retries=5)
             logger.info(
                 "Bulk insert %d records into OpenSearch", counts)
         except Exception as e:

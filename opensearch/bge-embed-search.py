@@ -39,72 +39,36 @@ credentials = boto3.Session().get_credentials()
 
 
 headers = {"Content-Type": "application/json"}
+# Define the function to call the SageMaker endpoint
+# BGE Embedding
+def call_sagemaker_endpoint(text):
+    endpoint_name = "tei-2025-02-02-15-18-25-267"
+    region = "us-east-1"
+    runtime = boto3.client('sagemaker-runtime', region_name=region)
+    # embeddings = None
+    # try:
+    text = text[:2000]
+    response = runtime.invoke_endpoint(
+            EndpointName=endpoint_name,
+            Body=json.dumps(
+                {
+                    "inputs": text,
+                    "is_query": True,
+                    "instruction" :  "Represent this sentence for searching relevant passages:"
+                }
+            ),
+            ContentType="application/json",
+        )
 
-def generate_text_embeddings(model_id, body):
-    """
-    Generate text embedding by using the Cohere Embed model.
-    Args:
-        model_id (str): The model ID to use.
-        body (str) : The reqest body to use.
-    Returns:
-        dict: The response from the model.
-    """
+    json_str = response['Body'].read().decode('utf8')
+    json_obj = json.loads(json_str)
+    embeddings = json_obj[0]
+    # except Exception as e:
+    #     logger.error(e)
+    #     logger.error(text)
+    return embeddings
 
-    # logger.info(
-    #     "Generating text emdeddings with the Cohere Embed model %s", model_id)
-
-    accept = '*/*'
-    content_type = 'application/json'
-
-    bedrock = boto3.client(service_name='bedrock-runtime', region_name='us-east-1')
-
-    response = bedrock.invoke_model(
-        body=body,
-        modelId=model_id,
-        accept=accept,
-        contentType=content_type
-    )
-
-    # logger.info("Successfully generated text with Cohere model %s", model_id)
-
-    return response
-
-def embeding_udf(text):
-    """
-    User defined function to generate embeddings for text data.
-    Args:
-        text (str): The text data to generate embeddings for.
-    Returns:
-        list: The embeddings for the text data.
-    """
-    # logging.basicConfig(level=logging.INFO,
-    #                     format="%(levelname)s: %(message)s")
-
-    model_id = 'cohere.embed-english-v3'
-    input_type = "search_document"
-    embedding_types = ["float"]
-    text = text[:1500]
-    body = json.dumps({
-        "texts": [text],
-        "input_type": input_type,
-        "embedding_types": embedding_types}
-    )
-    response = generate_text_embeddings(model_id=model_id,
-                                        body=body)
-
-    response_body = json.loads(response.get('body').read())
-
-    # logger.info(f"ID: {response_body.get('id')}")
-    # logger.info(f"Response type: {response_body.get('response_type')}")
-    #
-    # logger.info("Embeddings")
-    # for i, embedding in enumerate(response_body.get('embeddings')):
-    #     logger.info(f"\tEmbedding {i}")
-    #     logger.info(*embedding)
-
-    return response_body.get('embeddings').get('float')[0]
-
-ret = embeding_udf(text)
+ret = call_sagemaker_endpoint(text)
 
 # print(ret)
 

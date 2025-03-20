@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识库问答系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center mb-8 text-gray-800">知识库问答系统</h1>
+        
+        <div class="max-w-3xl mx-auto">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex gap-4">
+                    <input type="text" 
+                           id="searchInput" 
+                           class="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           placeholder="请输入您的问题...">
+                    <button onclick="search()" 
+                            class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        搜索
+                    </button>
+                </div>
+            </div>
+
+            <div id="results" class="mt-8 space-y-4">
+                <!-- 搜索结果将在这里动态显示 -->
+            </div>
+
+            <div id="loading" class="hidden text-center py-4">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function search() {
+            const query = document.getElementById('searchInput').value;
+            if (!query.trim()) return;
+
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            
+            loading.classList.remove('hidden');
+            results.innerHTML = '';
+
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    let htmlContent = '';
+                    
+                    // 显示 AI 思考过程（如果有）
+                    if (data.thinking) {
+                        htmlContent += `
+                            <div class="bg-yellow-50 rounded-lg shadow-md p-6 mb-6">
+                                <h2 class="text-xl font-semibold mb-2 text-yellow-800">AI 思考过程</h2>
+                                <div class="text-gray-700 whitespace-pre-wrap prose">
+                                    ${data.thinking}
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    // 显示 AI 最终答案
+                    if (data.answer) {
+                        htmlContent += `
+                            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                                <h2 class="text-xl font-semibold mb-2 text-blue-600">AI 回答</h2>
+                                <div class="text-gray-700 whitespace-pre-wrap prose">
+                                    ${data.answer}
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    // 显示相关文档
+                    if (data.results && data.results.length > 0) {
+                        htmlContent += `
+                            <div class="bg-white rounded-lg shadow-md p-6">
+                                <h2 class="text-xl font-semibold mb-4 text-gray-800">参考文档</h2>
+                                ${data.results.map(result => `
+                                    <div class="mb-4 last:mb-0 p-4 bg-gray-50 rounded">
+                                        <div class="text-gray-600">
+                                            ${result.text}
+                                        </div>
+                                        <div class="mt-2 text-sm text-gray-500">
+                                            相关度: ${Math.round(result.score * 100)}%
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                    } else {
+                        htmlContent += '<div class="text-center text-gray-500">未找到相关参考文档</div>';
+                    }
+
+                    results.innerHTML = htmlContent;
+                } else {
+                    results.innerHTML = `<div class="text-center text-red-500">搜索出错: ${data.error}</div>`;
+                }
+            } catch (error) {
+                results.innerHTML = `<div class="text-center text-red-500">请求失败: ${error.message}</div>`;
+            } finally {
+                loading.classList.add('hidden');
+            }
+        }
+
+        // 添加回车键搜索功能
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                search();
+            }
+        });
+    </script>
+</body>
+</html> 

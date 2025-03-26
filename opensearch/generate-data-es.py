@@ -17,7 +17,7 @@
 
 import random
 from faker import Faker
-from opensearchpy import OpenSearch, helpers
+from elasticsearch import Elasticsearch, helpers
 
 fake = Faker()
 
@@ -61,24 +61,12 @@ def generate_random_data():
         "ngs_list_recall_score": f"{random.uniform(0, 1):.1f}"
     }
 
-# Generate a sample data
-# sample_data = generate_random_data()
-# print(sample_data)
+host = "10.192.12.28"
+elasticsearch_client = Elasticsearch(['http://10.192.22.51:9200'])
 
-# auth = (OPENSEARCH_USER, OPENSEARCH_PASSWORD)
-host = "10.192.12.139"
-opensearch_client = OpenSearch(
-    hosts=[{'host': host, 'port': 9200}],
-    http_compress=True,  # enables gzip compression for request bodies
-    use_ssl=False,
-    verify_certs=False,
-    # http_auth=auth,
-    timeout=120
-)
-
-for i in range(10):
+for i in range(50):
     rbulk_docs = []
     bulk_docs = [generate_random_data() for _ in range(100000)]
-    response = helpers.bulk(opensearch_client, bulk_docs, max_retries=5)
+    response = helpers.bulk(elasticsearch_client, bulk_docs, max_retries=5)
     print(response)
 

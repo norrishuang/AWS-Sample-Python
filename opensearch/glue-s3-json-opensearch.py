@@ -84,6 +84,14 @@ def get_s3_object_stream(bucket, key):
         print(f"Error accessing S3 object: {e}")
         raise
 
+def extract_mongodb_id(doc):
+    """从MongoDB导出的文档中提取ID"""
+    if "_id" in doc:
+        # 检查是否是MongoDB的ObjectId格式
+        if isinstance(doc["_id"], dict) and "$oid" in doc["_id"]:
+            return doc["_id"]["$oid"]
+    return None
+
 def document_generator(s3_stream):
     """流式读取 S3 中的 JSON 文件并生成文档"""
     # 处理数组格式的 JSON
@@ -91,10 +99,15 @@ def document_generator(s3_stream):
 
     batch = []
     for i, doc in enumerate(objects):
+        # 从MongoDB格式中提取ID
+        doc_id = extract_mongodb_id(doc)
+        if doc_id is None:
+            doc_id = doc.get("_id", str(i))  # 使用普通_id或生成新ID
+        
         # 准备文档
         action = {
             "_index": args['INDEX'],
-            "_id": doc.get("_id", str(i)),  # 使用文档ID或生成新ID
+            "_id": doc_id,
             "_source": doc
         }
 
@@ -128,9 +141,14 @@ def process_non_array_json(s3_stream):
             current_key = None
         elif event == 'end_map' and prefix == '':  # 文档结束
             if current_doc:
+                # 从MongoDB格式中提取ID
+                doc_id = extract_mongodb_id(current_doc)
+                if doc_id is None:
+                    doc_id = current_doc.get("_id", str(doc_count))
+                
                 action = {
                     "_index": args['INDEX'],
-                    "_id": current_doc.get("_id", str(doc_count)),
+                    "_id": doc_id,
                     "_source": current_doc
                 }
                 batch.append(action)

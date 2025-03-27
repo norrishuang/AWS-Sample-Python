@@ -104,11 +104,18 @@ def document_generator(s3_stream):
         if doc_id is None:
             doc_id = doc.get("_id", str(i))  # 使用普通_id或生成新ID
         
+        # 创建文档的副本，以便我们可以安全地修改它
+        doc_copy = doc.copy()
+        
+        # 从文档中移除_id字段，因为它是OpenSearch的元数据字段
+        if "_id" in doc_copy:
+            del doc_copy["_id"]
+        
         # 准备文档
         action = {
             "_index": args['INDEX'],
             "_id": doc_id,
-            "_source": doc
+            "_source": doc_copy
         }
 
         batch.append(action)
@@ -146,10 +153,17 @@ def process_non_array_json(s3_stream):
                 if doc_id is None:
                     doc_id = current_doc.get("_id", str(doc_count))
                 
+                # 创建文档的副本，以便我们可以安全地修改它
+                doc_copy = current_doc.copy()
+                
+                # 从文档中移除_id字段，因为它是OpenSearch的元数据字段
+                if "_id" in doc_copy:
+                    del doc_copy["_id"]
+                
                 action = {
                     "_index": args['INDEX'],
                     "_id": doc_id,
-                    "_source": current_doc
+                    "_source": doc_copy
                 }
                 batch.append(action)
                 doc_count += 1

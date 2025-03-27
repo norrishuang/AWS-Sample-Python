@@ -19,6 +19,7 @@ parser.add_argument('--S3_BUCKET', required=True, help='S3 bucket name')
 parser.add_argument('--S3_KEY', required=True, help='S3 object key (path to JSON file)')
 parser.add_argument('--REGION', default='us-east-1', help='AWS region (default: us-east-1)')
 parser.add_argument('--IS_ARRAY', type=bool, default=True, help='Whether the JSON file is an array (default: True)')
+parser.add_argument('--FORMAT', default='json', choices=['json', 'jsonl'], help='JSON format: json (standard) or jsonl (JSON Lines)')
 
 args = parser.parse_args()
 
@@ -96,14 +97,6 @@ def document_generator(s3_stream):
     if batch:
         yield batch
 
-def extract_mongodb_id(doc):
-    """从MongoDB导出的文档中提取ID"""
-    if "_id" in doc:
-        # 检查是否是MongoDB的ObjectId格式
-        if isinstance(doc["_id"], dict) and "$oid" in doc["_id"]:
-            return doc["_id"]["$oid"]
-    return None
-
 def process_non_array_json(s3_stream):
     """处理非数组格式的 JSON 文件"""
     # 使用 ijson 流式解析顶层键
@@ -152,15 +145,20 @@ def process_non_array_json(s3_stream):
     if batch:
         yield batch
 
-def import_to_opensearch(bucket, key, is_array=True):
+def import_to_opensearch(bucket, key, is_array=True, format='json'):
     """从 S3 导入 JSON 文件到 OpenSearch"""
     print(f"Importing data from s3://{bucket}/{key} to OpenSearch index {args.INDEX}")
+    print(f"Using format: {format}")
     
     # 获取 S3 对象流
     s3_stream = get_s3_object_stream(bucket, key)
     
-    # 选择适当的生成器
-    generator = document_generator if is_array else process_non_array_json
+    # 根据格式选择适当的生成器
+    if format.lower() == 'jsonl':
+        generator = process_jsonl_format
+    else:
+        # 标准JSON格式
+        generator = document_generator if is_array else process_non_array_json
     
     # 跟踪进度
     total_docs = 0
@@ -176,4 +174,55 @@ def import_to_opensearch(bucket, key, is_array=True):
 
 if __name__ == "__main__":
     # 执行导入
-    import_to_opensearch(args.S3_BUCKET, args.S3_KEY, is_array=args.IS_ARRAY)
+    import_to_opensearch(args.S3_BUCKET, args.S3_KEY, is_array=args.IS_ARRAY, format=args.FORMAT)
+def process_jsonl_format(s3_stream):
+    """处理JSON Lines格式（每行一个JSON对象）"""
+    import json
+    
+    batch = []
+    doc_count = 0
+    
+    # 按行读取
+    for line_number, line in enumerate(s3_stream.iter_lines(decode_unicode=True), 1):
+        if not line.strip():  # 跳过空行
+            continue
+            
+        try:
+            # 解析单行JSON
+            doc = json.loads(line)
+            
+            # 从MongoDB格式中提取ID
+            doc_id = extract_mongodb_id(doc)
+            if doc_id is None:
+                doc_id = doc.get("_id", str(doc_count))
+                doc_count += 1
+            
+            # 创建文档的副本，以便我们可以安全地修改它
+            doc_copy = doc.copy()
+            
+            # 从文档中移除_id字段，因为它是OpenSearch的元数据字段
+            if "_id" in doc_copy:
+                del doc_copy["_id"]
+            
+            # 准备文档
+            action = {
+                "_index": args.INDEX,
+                "_id": doc_id,
+                "_source": doc_copy
+            }
+            
+            batch.append(action)
+            
+            # 当批次达到指定大小时，yield 批次并重置
+            if len(batch) >= BATCH_SIZE:
+                yield batch
+                batch = []
+                
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON at line {line_number}: {e}")
+            print(f"Problematic line: {line[:100]}...")  # 只打印前100个字符
+            continue  # 跳过这一行，继续处理
+    
+    # 处理最后一个批次
+    if batch:
+        yield batch

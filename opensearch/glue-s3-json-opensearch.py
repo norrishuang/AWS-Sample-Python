@@ -211,12 +211,16 @@ def import_to_opensearch(bucket, key, is_array=True, format='json'):
 def process_jsonl_format(s3_stream):
     """处理JSON Lines格式（每行一个JSON对象）"""
     import json
+    import io
     
     batch = []
     doc_count = 0
     
+    # 将S3流转换为文本行
+    text_stream = io.TextIOWrapper(s3_stream, encoding='utf-8')
+    
     # 按行读取
-    for line_number, line in enumerate(s3_stream.iter_lines(decode_unicode=True), 1):
+    for line_number, line in enumerate(text_stream, 1):
         if not line.strip():  # 跳过空行
             continue
             

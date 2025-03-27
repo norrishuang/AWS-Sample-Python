@@ -206,6 +206,8 @@ def import_to_opensearch(bucket, key, is_array=True, format='json'):
         print(f"Total documents imported so far: {total_docs}")
 
     print(f"Import completed. Total documents imported: {total_docs}")
+
+
 def process_jsonl_format(s3_stream):
     """处理JSON Lines格式（每行一个JSON对象）"""
     import json
@@ -257,7 +259,7 @@ def process_jsonl_format(s3_stream):
     # 处理最后一个批次
     if batch:
         yield batch
-        
+
 if __name__ == "__main__":
     # 执行导入
     import_to_opensearch(args['S3_BUCKET'], args['S3_KEY'], is_array=args['IS_ARRAY'], format=args['FORMAT'])

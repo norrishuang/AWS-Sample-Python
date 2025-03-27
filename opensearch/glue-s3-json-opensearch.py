@@ -87,6 +87,41 @@ def get_s3_object_stream(bucket, key):
         print(f"Error accessing S3 object: {e}")
         raise
 
+def transform_mongodb_json(json_data):
+    """
+    Transform MongoDB-style JSON by removing type wrappers.
+    
+    Args:
+        json_data: The JSON data to transform (can be dict, list, or primitive)
+        
+    Returns:
+        Transformed JSON data
+    """
+    if isinstance(json_data, dict):
+        # Check for MongoDB extended JSON types
+        if len(json_data) == 1:
+            key = list(json_data.keys())[0]
+            if key == "$numberInt":
+                return int(json_data[key])
+            elif key == "$numberDouble":
+                return float(json_data[key])
+            elif key == "$numberLong":
+                return int(json_data[key])
+            elif key == "$date":
+                return json_data[key]  # Could convert to datetime if needed
+            elif key == "$oid":
+                return json_data[key]
+        
+        # Process regular dictionaries
+        return {k: transform_mongodb_json(v) for k, v in json_data.items()}
+    
+    elif isinstance(json_data, list):
+        return [transform_mongodb_json(item) for item in json_data]
+    
+    else:
+        # Return primitive values as is
+        return json_data
+
 def extract_mongodb_id(doc):
     """从MongoDB导出的文档中提取ID"""
     if "_id" in doc:
@@ -102,6 +137,9 @@ def document_generator(s3_stream):
 
     batch = []
     for i, doc in enumerate(objects):
+        # 转换MongoDB格式的JSON，去除$numberInt等包装
+        doc = transform_mongodb_json(doc)
+        
         # 从MongoDB格式中提取ID
         doc_id = extract_mongodb_id(doc)
         if doc_id is None:
@@ -151,6 +189,9 @@ def process_non_array_json(s3_stream):
             current_key = None
         elif event == 'end_map' and prefix == '':  # 文档结束
             if current_doc:
+                # 转换MongoDB格式的JSON，去除$numberInt等包装
+                current_doc = transform_mongodb_json(current_doc)
+                
                 # 从MongoDB格式中提取ID
                 doc_id = extract_mongodb_id(current_doc)
                 if doc_id is None:
@@ -227,6 +268,9 @@ def process_jsonl_format(s3_stream):
         try:
             # 解析单行JSON
             doc = json.loads(line)
+            
+            # 转换MongoDB格式的JSON，去除$numberInt等包装
+            doc = transform_mongodb_json(doc)
             
             # 从MongoDB格式中提取ID
             doc_id = extract_mongodb_id(doc)

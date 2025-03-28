@@ -56,4 +56,31 @@ The script automatically transforms MongoDB-style JSON by removing type wrappers
 }
 ```
 
-This transformation ensures that numeric values are properly indexed in OpenSearch as numbers rather than strings or objects.
+### Special Field Handling
+
+The script includes special handling for certain fields:
+
+- `meta.donate_label.user_label`: This field is always converted to a string type, even if it contains MongoDB number types like `$numberInt` or `$numberLong`.
+
+Example:
+```json
+// Before transformation
+{
+  "meta": {
+    "donate_label": {
+      "user_label": {"$numberInt": "123"}
+    }
+  }
+}
+
+// After transformation
+{
+  "meta": {
+    "donate_label": {
+      "user_label": "123"  // Converted to string instead of number
+    }
+  }
+}
+```
+
+This transformation ensures that numeric values are properly indexed in OpenSearch as numbers rather than strings or objects, while special fields are handled according to specific requirements.

@@ -87,17 +87,29 @@ def get_s3_object_stream(bucket, key):
         print(f"Error accessing S3 object: {e}")
         raise
 
-def transform_mongodb_json(json_data):
+def transform_mongodb_json(json_data, path=None):
     """
     Transform MongoDB-style JSON by removing type wrappers.
     
     Args:
         json_data: The JSON data to transform (can be dict, list, or primitive)
+        path: Current path in the JSON structure (used for special field handling)
         
     Returns:
         Transformed JSON data
     """
+    if path is None:
+        path = []
+        
     if isinstance(json_data, dict):
+        # Special handling for meta.donate_label.user_label field
+        # Convert to string even if it's a MongoDB number type
+        if '.'.join(path) == 'meta.donate_label.user_label':
+            if len(json_data) == 1:
+                key = list(json_data.keys())[0]
+                if key in ["$numberInt", "$numberLong", "$numberDouble"]:
+                    return str(json_data[key])  # Convert to string instead of number
+        
         # Check for MongoDB extended JSON types
         if len(json_data) == 1:
             key = list(json_data.keys())[0]
@@ -113,10 +125,14 @@ def transform_mongodb_json(json_data):
                 return json_data[key]
         
         # Process regular dictionaries
-        return {k: transform_mongodb_json(v) for k, v in json_data.items()}
+        result = {}
+        for k, v in json_data.items():
+            new_path = path + [k]
+            result[k] = transform_mongodb_json(v, new_path)
+        return result
     
     elif isinstance(json_data, list):
-        return [transform_mongodb_json(item) for item in json_data]
+        return [transform_mongodb_json(item, path + [str(i)]) for i, item in enumerate(json_data)]
     
     else:
         # Return primitive values as is

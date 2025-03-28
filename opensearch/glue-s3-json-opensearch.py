@@ -101,6 +101,10 @@ def transform_mongodb_json(json_data, path=None):
     if path is None:
         path = []
         
+    # 处理字符串 "null" 的情况，返回 None 以便后续移除该字段
+    if json_data == "null":
+        return None
+        
     if isinstance(json_data, dict):
         # Special handling for meta.donate_label.user_label field
         # Convert to string even if it's a MongoDB number type
@@ -128,11 +132,16 @@ def transform_mongodb_json(json_data, path=None):
         result = {}
         for k, v in json_data.items():
             new_path = path + [k]
-            result[k] = transform_mongodb_json(v, new_path)
+            transformed_value = transform_mongodb_json(v, new_path)
+            # 只有当转换后的值不是 None 时才添加到结果中
+            if transformed_value is not None:
+                result[k] = transformed_value
         return result
     
     elif isinstance(json_data, list):
-        return [transform_mongodb_json(item, path + [str(i)]) for i, item in enumerate(json_data)]
+        # 过滤掉列表中的 None 值
+        transformed_list = [transform_mongodb_json(item, path + [str(i)]) for i, item in enumerate(json_data)]
+        return [item for item in transformed_list if item is not None]
     
     else:
         # Return primitive values as is

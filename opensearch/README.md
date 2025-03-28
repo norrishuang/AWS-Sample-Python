@@ -83,4 +83,25 @@ Example:
 }
 ```
 
+### Null String Handling
+
+The script removes fields with the string value "null":
+
+```json
+// Before transformation
+{
+  "field1": "value",
+  "field2": "null",
+  "field3": {
+    "nested": "null"
+  }
+}
+
+// After transformation
+{
+  "field1": "value",
+  "field3": {}  // nested field removed because it was "null"
+}
+```
+
 This transformation ensures that numeric values are properly indexed in OpenSearch as numbers rather than strings or objects, while special fields are handled according to specific requirements.

@@ -32,6 +32,7 @@ The script can be run as an AWS Glue job with the following parameters:
 --REGION: AWS region (default: us-east-1)
 --IS_ARRAY: Whether the JSON is an array (default: true)
 --FORMAT: JSON format - 'json' or 'jsonl' (default: json)
+--ERROR_BUCKET: S3 bucket for storing failed batches (default: same as S3_BUCKET)
 ```
 
 ## MongoDB JSON Transformation

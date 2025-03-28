@@ -21,8 +21,9 @@ import argparse
 import io
 import boto3
 from botocore.exceptions import ClientError
-
+import datetime
 import sys
+import traceback
 
 from opensearchpy import OpenSearch, helpers
 from awsglue.utils import getResolvedOptions
@@ -40,7 +41,8 @@ args = getResolvedOptions(sys.argv, [
     'S3_KEY',
     'REGION',
     'IS_ARRAY',
-    'FORMAT'
+    'FORMAT',
+    'ERROR_BUCKET'  # 新增参数：错误数据存储的S3桶
 ])
 
 # 设置默认值
@@ -53,6 +55,8 @@ else:
     args['IS_ARRAY'] = args['IS_ARRAY'].lower() == 'true'
 if 'FORMAT' not in args:
     args['FORMAT'] = 'json'  # 默认为标准JSON格式
+if 'ERROR_BUCKET' not in args:
+    args['ERROR_BUCKET'] = args['S3_BUCKET']  # 默认使用与源数据相同的桶
 
 # 现在可以使用 args 字典访问所有参数
 print(f"OpenSearch Endpoint: {args['AOS_ENDPOINT']}")
@@ -154,6 +158,46 @@ def extract_mongodb_id(doc):
         if isinstance(doc["_id"], dict) and "$oid" in doc["_id"]:
             return doc["_id"]["$oid"]
     return None
+
+def save_failed_batch_to_s3(batch, error_message, bucket):
+    """
+    将失败的批次数据保存到S3
+    
+    Args:
+        batch: 失败的数据批次
+        error_message: 错误信息
+        bucket: 目标S3桶
+    """
+    try:
+        # 创建时间戳作为文件名的一部分
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        key = f"error_data/failed_batch_{timestamp}.json"
+        
+        # 准备要保存的数据，包括错误信息和原始数据
+        data_to_save = {
+            "error": error_message,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "index": args['INDEX'],
+            "data": [doc["_source"] for doc in batch]  # 只保存文档源数据，不包括元数据
+        }
+        
+        # 将数据转换为JSON字符串
+        json_data = json.dumps(data_to_save, default=str)  # default=str 处理不可序列化的对象
+        
+        # 上传到S3
+        s3_client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=json_data,
+            ContentType='application/json'
+        )
+        
+        print(f"Failed batch saved to s3://{bucket}/{key}")
+        return f"s3://{bucket}/{key}"
+    except Exception as e:
+        print(f"Error saving failed batch to S3: {e}")
+        traceback.print_exc()
+        return None
 
 def document_generator(s3_stream):
     """流式读取 S3 中的 JSON 文件并生成文档"""
@@ -263,15 +307,32 @@ def import_to_opensearch(bucket, key, is_array=True, format='json'):
 
     # 跟踪进度
     total_docs = 0
+    failed_batches = 0
 
     # 批量导入
     for i, batch in enumerate(generator(s3_stream)):
-        success, failed = helpers.bulk(opensearch_client, batch, stats_only=True)
-        total_docs += success
-        print(f"Batch {i+1}: Imported {success} documents, Failed: {failed}")
-        print(f"Total documents imported so far: {total_docs}")
+        try:
+            success, failed = helpers.bulk(opensearch_client, batch, stats_only=True)
+            total_docs += success
+            print(f"Batch {i+1}: Imported {success} documents, Failed: {failed}")
+            print(f"Total documents imported so far: {total_docs}")
+            
+        except Exception as e:
+            # 处理异常，保存失败的批次到S3
+            error_message = str(e)
+            print(f"Error processing batch {i+1}: {error_message}")
+            
+            # 保存失败的批次到S3
+            error_file_path = save_failed_batch_to_s3(batch, error_message, args['ERROR_BUCKET'])
+            if error_file_path:
+                print(f"Failed batch saved to {error_file_path}")
+            
+            failed_batches += 1
 
-    print(f"Import completed. Total documents imported: {total_docs}")
+    print(f"Import completed. Total documents imported: {total_docs}, Failed batches: {failed_batches}")
+    
+    if failed_batches > 0:
+        print(f"WARNING: {failed_batches} batches failed to import. Check the error_data/ directory in bucket {args['ERROR_BUCKET']} for details.")
 
 
 def process_jsonl_format(s3_stream):
@@ -336,4 +397,3 @@ def process_jsonl_format(s3_stream):
 if __name__ == "__main__":
     # 执行导入
     import_to_opensearch(args['S3_BUCKET'], args['S3_KEY'], is_array=args['IS_ARRAY'], format=args['FORMAT'])
-

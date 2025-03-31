@@ -108,6 +108,10 @@ def transform_mongodb_json(json_data, path=None):
     # 处理字符串 "null" 的情况，返回 None 以便后续移除该字段
     if json_data == "null":
         return None
+    
+    # Special handling for meta.data_files field - convert entire content to string
+    if '.'.join(path) == 'meta.data_files':
+        return json.dumps(json_data)
         
     if isinstance(json_data, dict):
         # Special handling for meta.donate_label.user_label field
@@ -174,11 +178,18 @@ def save_failed_batch_to_s3(batch, error_message, bucket):
         key = f"error_data/failed_batch_{timestamp}.json"
         
         # 准备要保存的数据，包括错误信息和原始数据
+        # 保存文档源数据和ID
+        documents_with_ids = []
+        for doc in batch:
+            document = doc["_source"].copy()  # 复制源数据
+            document["_id"] = doc["_id"]      # 添加ID字段
+            documents_with_ids.append(document)
+            
         data_to_save = {
             "error": error_message,
             "timestamp": datetime.datetime.now().isoformat(),
             "index": args['INDEX'],
-            "data": [doc["_source"] for doc in batch]  # 只保存文档源数据，不包括元数据
+            "data": documents_with_ids  # 保存包含_id的完整文档
         }
         
         # 将数据转换为JSON字符串

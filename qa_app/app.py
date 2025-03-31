@@ -91,7 +91,7 @@ ingest_pipeline_definition = {
     "processors": [
         {
             "text_embedding": {
-                "model_id": os.getenv('OPENSEARCH_MODEL_ID', '-kB2sZUB0LCOh9zdNaiU'),
+                "model_id": os.getenv('OPENSEARCH_EMBEDDING_MODEL_ID', '-kB2sZUB0LCOh9zdNaiU'),
                 "field_map": {
                     "text": "text_embedding"
                 }

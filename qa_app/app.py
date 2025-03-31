@@ -207,7 +207,7 @@ def search():
             "neural": {
                 "text_embedding": {
                     "query_text": query,
-                    "model_id": os.getenv('OPENSEARCH_MODEL_ID', '-kB2sZUB0LCOh9zdNaiU'),
+                    "model_id": os.getenv('OPENSEARCH_EMBEDDING_MODEL_ID', '-kB2sZUB0LCOh9zdNaiU'),
                     "k": 5
                 }
             }

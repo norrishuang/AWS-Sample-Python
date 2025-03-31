@@ -1,0 +1,180 @@
+version: "2"
+msk-pipeline:
+  processor:
+    # Core logs - 合并相似的格式
+    # 合并 cimb-lazada, modelbank, cimb-paylater
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp} \[%{DATA},%{DATA:traceId},%{DATA:seqNo},%{DATA}\] %{WORD:level}%{SPACE}+%{DATA:class} - %{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "core" and /fields/logs_type in {"cimb-lazada", "modelbank", "cimb-paylater"}'
+        timeout_millis: 60000
+
+    # 合并 fts-proxy, fts-batch 格式
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp} \[%{DATA:thread}\]( \[%{DATA:traceId}\])? %{WORD:level}%{SPACE}+%{DATA:class} - %{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "core" and /fields/logs_type in {"fts-proxy", "fts-batch"}'
+        timeout_millis: 60000
+
+    # 合并 csn-server, csn-schedule, icms
+    - grok:
+        pattern_definitions:
+          TIMESTAMP_ICMS: "%{YEAR}/%{MONTHNUM}/%{MONTHDAY}[T ]%{HOUR}:?%{MINUTE}(?::?%{SECOND})?%{ISO8601_TIMEZONE}?"
+        match:
+          message: ['%{TIMESTAMP_ICMS:timestamp} %{WORD:level}%{SPACE}+\[%{DATA:thread}\|%{DATA:traceId}\] %{DATA:class} - %{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "core" and /fields/logs_type in {"csn-server", "csn-schedule", "icms"}'
+        timeout_millis: 60000
+
+    # 合并 gsave, gcredit
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp}\|\s*%{WORD:level}\|\s*%{DATA:traceId}\|%{DATA}\|\s*%{DATA:traceId}\|\s*%{DATA:class}\s*-\s*%{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "core" and /fields/logs_type in {"gsave", "gcredit"}'
+        timeout_millis: 60000
+
+    # 保留特殊格式的单独处理
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp} \[%{DATA:traceId}\] \[%{DATA} %{DATA} %{DATA} %{DATA} %{DATA:seqNo}\] \[%{DATA:thread}\] %{WORD:level}%{SPACE}+%{DATA:class} - %{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "core" and /fields/logs_type == "apsi"'
+        timeout_millis: 60000
+
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp} \[%{DATA:seqNo}\] \[%{DATA}\] \[%{DATA}\] %{WORD:level}%{SPACE}+\[%{DATA:thread}\] %{DATA:class}\s+%{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "core" and /fields/logs_type == "sequences"'
+        timeout_millis: 60000
+
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp} %{WORD:level}%{SPACE}+\[%{DATA:thread}\] %{DATA:class} %{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "core" and /fields/logs_type == "ensemble-om"'
+        timeout_millis: 60000
+
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp}\|%{SPACE}+%{WORD:level}\|\s*%{DATA:traceId}\|\s*%{DATA:thread}\|\s*%{DATA:class} - %{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "core" and /fields/logs_type == "ibp"'
+        timeout_millis: 60000
+
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp}\|\s*%{WORD:level}\s*\|\s*%{DATA:traceId}\|\s*\[%{DATA} %{DATA} %{DATA} %{DATA} %{DATA:seqNo}\]?\|\s*%{DATA:thread}\|\s*%{DATA:class} - %{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "core" and /fields/logs_type == "ocpay"'
+        timeout_millis: 60000
+
+    # 合并相似格式的 bankcloud-check, appointment
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp}\s+(\[%{DATA:traceId}\]\s+\[%{DATA:thread}\]|%{WORD:level}\s+\[%{DATA:traceId}\]\s+\[%{DATA:thread}\])\s+%{WORD:level}\s+%{DATA:class}\s*-\s*%{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "core" and /fields/logs_type in {"bankcloud-check", "appointment"}'
+        timeout_millis: 60000
+
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp}\s+\[%{DATA:thread}\|%{DATA:traceId}\]\s*%{WORD:level}\s+%{DATA:class}\s*-\s*%{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "core" and /fields/logs_type == "icms-workflow"'
+        timeout_millis: 60000
+
+    # 合并日期处理器
+    - date:
+        match:
+          - key: "timestamp"
+            patterns: [ "yyyy/MM/dd HH:mm:ss:SSS" ]
+        source_timezone: "Asia/Shanghai"
+        date_when: '/fields/logs_topic == "core" and /fields/logs_type in {"icms", "csn-server", "csn-schedule"} or /fields/logs_topic == "chms"'
+
+    - date:
+        match:
+          - key: "timestamp"
+            patterns: [ "yyyy-MM-dd HH:mm:ss:SSS" ]
+        source_timezone: "Asia/Shanghai"
+        date_when: '/fields/logs_topic == "core" and /fields/logs_type in {"ibp", "gsave", "gcredit"}'
+
+    - date:
+        match:
+          - key: "timestamp"
+            patterns: [ "yyyy-MM-dd HH:mm:ss.SSS" ]
+        source_timezone: "Asia/Shanghai"
+        date_when: '/fields/logs_topic in {"core", "slp", "rcms"} and /fields/logs_type in {"ocpay", "fts-proxy", "fts-batch", "appointment", "bankcloud-check", "icms-workflow"}'
+
+    - date:
+        match:
+          - key: "timestamp"
+            patterns: [ "yyyy-MM-dd HH:mm:ss,SSS" ]
+        source_timezone: "Asia/Shanghai"
+        date_when: '/fields/logs_topic == "core" and /fields/logs_type not in {"icms", "csn-server", "csn-schedule", "ibp", "gsave", "gcredit", "ocpay", "fts-proxy", "fts-batch", "appointment", "bankcloud-check", "icms-workflow"}'
+ 
+    # rcms - 保持不变
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp} %{WORD:level}%{SPACE}+\[%{DATA:traceId}\] \[%{DATA:thread}\] \[%{DATA:class}\]- %{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "rcms"'
+        timeout_millis: 60000
+ 
+    # slp - 保持不变
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp} %{WORD:level}%{SPACE}+\[%{DATA:traceId},%{DATA},%{DATA}\] \[%{DATA:thread}\] \[%{DATA:class}\]\s*- %{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "slp"'
+        timeout_millis: 60000
+    
+    # chms - 合并相似格式
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp}\s+%{WORD:level}\s+\[%{DATA:thread}\]\s+%{DATA:class}\s*[-:]\s*%{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "chms" and /fields/logs_type in {"chms-smn", "chms-job", "chms-arch"}'
+        timeout_millis: 60000
+    
+    - grok:
+        match:
+          message: ['%{TIMESTAMP_ISO8601:timestamp}\s*%{WORD:level}\s*\[%{DATA:traceId},%{DATA:userId}\]\|%{DATA:thread}\|%{DATA:class}:\s*%{GREEDYDATA:msg}']
+        grok_when: '/fields/logs_topic == "chms" and /fields/logs_type not in {"chms-smn", "chms-job", "chms-arch"}'
+        timeout_millis: 60000
+
+    # 通用处理
+    - lowercase_string:
+        with_keys:
+          - 'fields/logs_type'
+    
+    # 处理 Grok 解析失败的情况
+    - add_entries:
+        entries:
+          - key: "msg"
+            value: "${message}"
+            add_when: 'hasTags("_grokparsefailure")'
+ 
+    - delete_entries:
+        with_keys: ["@version", "message"]
+  
+  # 保持源和接收器配置不变
+  source:
+    kafka:
+      acknowledgments: true
+      topics:
+         - name: "core-prd1"
+           group_id: "1"
+           serde_format: "json"
+         - name: "rcms-prd1"
+           group_id: "1"
+           serde_format: "json"
+         - name: "slp-prd1"
+           group_id: "1"
+           serde_format: "json"
+         - name: "chms-prd1"
+           group_id: "1"
+           serde_format: "json"
+      aws:
+        sts_role_arn: "arn:aws:iam::975050338904:role/efk-ingestion-pipeline-role"
+        region: "ap-southeast-1"
+        msk:
+          arn: "arn:aws:kafka:ap-southeast-1:975050338904:cluster/prod-efk-kafka/fcadf929-2e56-4673-955b-bf93ca7370cf-3"
+ 
+  sink:
+      - opensearch:
+          hosts: [ "https://vpc-prod-efk-opensearch-jcl75k7yffotkpcsv2hjyezkde.ap-southeast-1.es.amazonaws.com" ]
+          aws:
+            sts_role_arn: "arn:aws:iam::975050338904:role/efk-ingestion-pipeline-role"
+            region: "ap-southeast-1"
+            serverless: false
+          index: "s1-${subsystem}-${fields/logs_topic}-${fields/logs_type}-alias"

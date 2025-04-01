@@ -26,6 +26,25 @@
         .hidden {
             display: none;
         }
+        /* 思考过程折叠区域样式 */
+        .thinking-details summary {
+            list-style: none;
+            position: relative;
+            padding-left: 1.5rem;
+        }
+        .thinking-details summary::-webkit-details-marker {
+            display: none;
+        }
+        .thinking-details summary::before {
+            content: '▶';
+            position: absolute;
+            left: 0;
+            transform: translateY(-2px);
+            transition: transform 0.2s;
+        }
+        .thinking-details[open] summary::before {
+            transform: rotate(90deg) translateX(-2px);
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -155,14 +174,18 @@
                 if (data.success) {
                     let htmlContent = '';
                     
-                    // 显示 AI 思考过程（如果有）
+                    // 显示 AI 思考过程（如果有）- 使用可折叠区域
                     if (data.thinking) {
                         htmlContent += `
                             <div class="bg-yellow-50 rounded-lg shadow-md p-6 mb-6">
-                                <h2 class="text-xl font-semibold mb-2 text-yellow-800">AI 思考过程</h2>
-                                <div class="text-gray-700 whitespace-pre-wrap prose">
-                                    ${data.thinking}
-                                </div>
+                                <details class="thinking-details">
+                                    <summary class="text-xl font-semibold mb-2 text-yellow-800 cursor-pointer hover:text-yellow-600">
+                                        AI 思考过程 (点击展开/折叠)
+                                    </summary>
+                                    <div class="text-gray-700 whitespace-pre-wrap prose mt-3 pl-2 border-l-2 border-yellow-300">
+                                        ${data.thinking}
+                                    </div>
+                                </details>
                             </div>
                         `;
                     }

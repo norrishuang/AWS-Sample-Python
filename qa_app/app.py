@@ -234,6 +234,11 @@ def search():
             params={'search_pipeline': 'my-conversation-search-pipeline-deepseek-zh'}
         )
         
+        # 打印完整的 OpenSearch 响应到控制台
+        print("\n=== OpenSearch 完整响应 ===")
+        print(json.dumps(response, ensure_ascii=False, indent=2))
+        print("=== OpenSearch 响应结束 ===\n")
+        
         # 处理搜索结果
         hits = response['hits']['hits']
         results = []
@@ -248,6 +253,11 @@ def search():
         # 获取生成式问答结果和思考过程
         raw_answer = response.get('ext', {}).get('retrieval_augmented_generation', {}).get('answer', '')
         
+        # 打印生成式问答原始回答
+        print("\n=== 生成式问答原始回答 ===")
+        print(f"raw_answer: {raw_answer}")
+        print("=== 原始回答结束 ===\n")
+        
         # 分割思考过程和最终答案
         thinking = ''
         answer = raw_answer
@@ -255,7 +265,17 @@ def search():
         if '</think>' in raw_answer:
             parts = raw_answer.split('</think>')
             thinking = parts[0].strip()
-            answer = parts[1].strip() if len(parts) > 1 else ''
+            # 处理可能存在的多余换行符
+            answer = parts[1].replace('\n\n', '\n').strip() if len(parts) > 1 else ''
+            
+            # 打印分割后的思考过程和答案
+            print("\n=== 分割后的内容 ===")
+            print(f"思考过程: {thinking}")
+            print(f"最终答案: {answer}")
+            print("=== 分割结束 ===\n")
+        else:
+            # 如果没有思考过程标记，确保答案也进行清理
+            answer = answer.replace('\n\n', '\n').strip()
             
         return jsonify({
             'success': True,

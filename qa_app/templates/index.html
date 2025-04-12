@@ -176,51 +176,92 @@
                     
                     // 显示 AI 思考过程（如果有）- 使用可折叠区域
                     if (data.thinking) {
-                        htmlContent += `
-                            <div class="bg-yellow-50 rounded-lg shadow-md p-6 mb-6">
-                                <details class="thinking-details">
-                                    <summary class="text-xl font-semibold mb-2 text-yellow-800 cursor-pointer hover:text-yellow-600">
-                                        AI 思考过程 (点击展开/折叠)
-                                    </summary>
-                                    <div class="text-gray-700 whitespace-pre-wrap prose mt-3 pl-2 border-l-2 border-yellow-300">
-                                        ${data.thinking}
-                                    </div>
-                                </details>
-                            </div>
-                        `;
+                        // 使用DOM API创建思考过程元素，避免模板字符串中的空格问题
+                        const thinkingDiv = document.createElement('div');
+                        thinkingDiv.className = 'bg-yellow-50 rounded-lg shadow-md p-6 mb-6';
+                        
+                        const detailsElem = document.createElement('details');
+                        detailsElem.className = 'thinking-details';
+                        
+                        const summaryElem = document.createElement('summary');
+                        summaryElem.className = 'text-xl font-semibold mb-2 text-yellow-800 cursor-pointer hover:text-yellow-600';
+                        summaryElem.textContent = 'AI 思考过程 (点击展开/折叠)';
+                        
+                        const contentDiv = document.createElement('div');
+                        contentDiv.className = 'text-gray-700 whitespace-pre-wrap prose mt-3 pl-2 border-l-2 border-yellow-300';
+                        contentDiv.textContent = data.thinking;
+                        
+                        detailsElem.appendChild(summaryElem);
+                        detailsElem.appendChild(contentDiv);
+                        thinkingDiv.appendChild(detailsElem);
+                        
+                        const tempContainer = document.createElement('div');
+                        tempContainer.appendChild(thinkingDiv);
+                        htmlContent += tempContainer.innerHTML;
                     }
                     
                     // 显示 AI 最终答案
                     if (data.answer) {
-                        htmlContent += `
-                            <div class="bg-green-50 rounded-lg shadow-md p-6 mb-6">
-                                <h2 class="text-xl font-semibold mb-2 text-green-600">AI 回答</h2>
-                                <div class="text-gray-700 whitespace-pre-wrap prose">
-                                    ${data.answer.trim()}
-                                </div>
-                            </div>
-                        `;
+                        // 使用不保留空格的方式构建HTML
+                        const answerDiv = document.createElement('div');
+                        answerDiv.className = 'bg-green-50 rounded-lg shadow-md p-6 mb-6';
+                        
+                        const titleH2 = document.createElement('h2');
+                        titleH2.className = 'text-xl font-semibold mb-2 text-green-600';
+                        titleH2.textContent = 'AI 回答';
+                        
+                        const contentDiv = document.createElement('div');
+                        contentDiv.className = 'text-gray-700 prose';
+                        contentDiv.textContent = data.answer;
+                        
+                        answerDiv.appendChild(titleH2);
+                        answerDiv.appendChild(contentDiv);
+                        
+                        // 将创建的DOM元素转换为HTML字符串
+                        const tempContainer = document.createElement('div');
+                        tempContainer.appendChild(answerDiv);
+                        htmlContent += tempContainer.innerHTML;
                     }
 
                     // 显示相关文档
                     if (data.results && data.results.length > 0) {
-                        htmlContent += `
-                            <div class="bg-white rounded-lg shadow-md p-6">
-                                <h2 class="text-xl font-semibold mb-4 text-gray-800">参考文档</h2>
-                                ${data.results.map(result => `
-                                    <div class="mb-4 last:mb-0 p-4 bg-gray-50 rounded">
-                                        <div class="text-gray-600">
-                                            ${result.text}
-                                        </div>
-                                        <div class="mt-2 text-sm text-gray-500">
-                                            相关度: ${Math.round(result.score * 100)}%
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        `;
+                        // 使用DOM API创建相关文档元素
+                        const docsDiv = document.createElement('div');
+                        docsDiv.className = 'bg-white rounded-lg shadow-md p-6';
+                        
+                        const titleH2 = document.createElement('h2');
+                        titleH2.className = 'text-xl font-semibold mb-4 text-gray-800';
+                        titleH2.textContent = '参考文档';
+                        docsDiv.appendChild(titleH2);
+                        
+                        data.results.forEach(result => {
+                            const resultDiv = document.createElement('div');
+                            resultDiv.className = 'mb-4 last:mb-0 p-4 bg-gray-50 rounded';
+                            
+                            const textDiv = document.createElement('div');
+                            textDiv.className = 'text-gray-600';
+                            textDiv.textContent = result.text;
+                            
+                            const scoreDiv = document.createElement('div');
+                            scoreDiv.className = 'mt-2 text-sm text-gray-500';
+                            scoreDiv.textContent = `相关度: ${Math.round(result.score * 100)}%`;
+                            
+                            resultDiv.appendChild(textDiv);
+                            resultDiv.appendChild(scoreDiv);
+                            docsDiv.appendChild(resultDiv);
+                        });
+                        
+                        const tempContainer = document.createElement('div');
+                        tempContainer.appendChild(docsDiv);
+                        htmlContent += tempContainer.innerHTML;
                     } else {
-                        htmlContent += '<div class="text-center text-gray-500">未找到相关参考文档</div>';
+                        const noDocsDiv = document.createElement('div');
+                        noDocsDiv.className = 'text-center text-gray-500';
+                        noDocsDiv.textContent = '未找到相关参考文档';
+                        
+                        const tempContainer = document.createElement('div');
+                        tempContainer.appendChild(noDocsDiv);
+                        htmlContent += tempContainer.innerHTML;
                     }
 
                     results.innerHTML = htmlContent;

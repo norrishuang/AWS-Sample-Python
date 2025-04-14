@@ -112,6 +112,7 @@ dag = DAG(
     schedule_interval=timedelta(days=1),
     start_date=days_ago(1),
     tags=['emr', 'spark'],
+    catchup=False,
 )
 
 # 创建EMR集群

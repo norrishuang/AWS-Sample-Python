@@ -132,7 +132,7 @@ def create_embedding_pipeline(opensearch, pipeline_id, model_id):
         "description": "Pipeline to generate embeddings for content field",
         "processors": [
             {
-                "inference": {
+                "text_embedding": {
                     "model_id": model_id,
                     "field_map": {
                         "content": "text_field"

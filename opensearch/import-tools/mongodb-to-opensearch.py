@@ -102,12 +102,24 @@ def generate_actions(documents, index_name):
     """Generate bulk actions for OpenSearch."""
     for doc in documents:
         # Use MongoDB ObjectId as document ID if available
-        doc_id = doc.get("_id")
-
-        # Remove _id field as OpenSearch has its own _id field
+        doc_id = None
+        
+        # Extract MongoDB ObjectId from _id field
         if "_id" in doc:
+            if isinstance(doc["_id"], dict) and "$oid" in doc["_id"]:
+                doc_id = doc["_id"]["$oid"]
+            else:
+                doc_id = doc["_id"]
+            
+            # Remove _id field as OpenSearch has its own _id field
             del doc["_id"]
-
+        
+        # Ensure we have a document ID
+        if not doc_id:
+            # Generate a random ID if no MongoDB ObjectId is available
+            import uuid
+            doc_id = str(uuid.uuid4())
+            
         yield {
             "_index": index_name,
             "_id": doc_id,
@@ -120,14 +132,16 @@ def create_embedding_pipeline(opensearch, pipeline_id, model_id):
         "description": "Pipeline to generate embeddings for content field",
         "processors": [
             {
-                "text_embedding": {
+                "inference": {
                     "model_id": model_id,
                     "field_map": {
-                        "content": "content_embedding"
-                    }
+                        "content": "text_field"
+                    },
+                    "target_field": "content_embedding"
                 }
             }
         ]
+    }
     }
     
     try:

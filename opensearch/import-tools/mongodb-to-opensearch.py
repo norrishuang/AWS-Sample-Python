@@ -114,6 +114,43 @@ def generate_actions(documents, index_name):
             "_source": doc
         }
 
+def create_embedding_pipeline(opensearch, pipeline_id, model_id):
+    """Create or update an OpenSearch ingestion pipeline for embedding generation."""
+    pipeline_config = {
+        "description": "Pipeline to generate embeddings for content field",
+        "processors": [
+            {
+                "inference": {
+                    "model_id": model_id,
+                    "field_map": {
+                        "content": "text_field"
+                    },
+                    "target_field": "content_embedding"
+                }
+            }
+        ]
+    }
+    
+    try:
+        # Check if pipeline exists
+        opensearch.ingest.get_pipeline(id=pipeline_id)
+        print(f"Pipeline {pipeline_id} already exists. Updating...")
+    except:
+        print(f"Creating new pipeline {pipeline_id}...")
+    
+    # Create or update pipeline
+    response = opensearch.ingest.put_pipeline(
+        id=pipeline_id,
+        body=pipeline_config
+    )
+    
+    if response.get('acknowledged', False):
+        print(f"Pipeline {pipeline_id} created/updated successfully")
+        return True
+    else:
+        print(f"Failed to create/update pipeline {pipeline_id}")
+        return False
+
 def import_to_opensearch(file_path, opensearch_config):
     """Import JSON data from file to OpenSearch."""
     # Read JSON file
@@ -134,13 +171,55 @@ def import_to_opensearch(file_path, opensearch_config):
 
     # Check if index exists, create if not
     if not opensearch.indices.exists(index=opensearch_config['index']):
-        opensearch.indices.create(index=opensearch_config['index'])
-        print(f"Created index: {opensearch_config['index']}")
+        # Define index mapping with vector field configuration
+        vector_dimension = opensearch_config.get('vector_dimension', 1024)
+        index_mapping = {
+            "mappings": {
+                "properties": {
+                    "content_embedding": {
+                        "type": "knn_vector",
+                        "dimension": vector_dimension,
+                        "method": {
+                            "name": "hnsw",
+                            "engine": "faiss",
+                            "space_type": "l2",
+                            "parameters": {
+                                "ef_construction": 128,
+                                "m": 16
+                            }
+                        }
+                    },
+                    "content": {
+                        "type": "text"
+                    }
+                }
+            }
+        }
+        
+        # Create index with vector field configuration
+        opensearch.indices.create(
+            index=opensearch_config['index'],
+            body=index_mapping
+        )
+        print(f"Created index: {opensearch_config['index']} with vector field configuration")
+    
+    # Create embedding pipeline if specified
+    pipeline_id = opensearch_config.get('pipeline_id')
+    if pipeline_id and opensearch_config.get('model_id'):
+        create_embedding_pipeline(opensearch, pipeline_id, opensearch_config['model_id'])
+        print(f"Using pipeline {pipeline_id} for embedding generation")
+    
+    # Generate actions with pipeline if specified
+    actions = generate_actions(transformed_data, opensearch_config['index'])
+    
+    # Add pipeline parameter to actions if pipeline is specified
+    if pipeline_id:
+        actions = [{**action, "pipeline": pipeline_id} for action in actions]
 
     # Bulk import
     success, failed = bulk(
         opensearch,
-        generate_actions(transformed_data, opensearch_config['index']),
+        actions,
         chunk_size=1000,
         max_retries=3,
         raise_on_error=False
@@ -173,6 +252,9 @@ def main():
     parser.add_argument('--username', required=True, help='OpenSearch username')
     parser.add_argument('--password', required=True, help='OpenSearch password')
     parser.add_argument('--verify-certs', action='store_true', default=True, help='Verify SSL certificates')
+    parser.add_argument('--pipeline-id', help='OpenSearch ingestion pipeline ID for embedding generation')
+    parser.add_argument('--model-id', help='Model ID to use for embedding generation')
+    parser.add_argument('--vector-dimension', type=int, default=1024, help='Dimension of the embedding vector (default: 1024)')
 
     args = parser.parse_args()
 
@@ -184,8 +266,15 @@ def main():
         'username': args.username,
         'password': args.password,
         'index': args.index,
-        'verify_certs': args.verify_certs
+        'verify_certs': args.verify_certs,
+        'vector_dimension': args.vector_dimension
     }
+    
+    # Add pipeline configuration if provided
+    if args.pipeline_id:
+        opensearch_config['pipeline_id'] = args.pipeline_id
+    if args.model_id:
+        opensearch_config['model_id'] = args.model_id
 
     import_to_opensearch(args.file, opensearch_config)
 

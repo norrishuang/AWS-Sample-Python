@@ -135,9 +135,8 @@ def create_embedding_pipeline(opensearch, pipeline_id, model_id):
                 "text_embedding": {
                     "model_id": model_id,
                     "field_map": {
-                        "content": "text_field"
-                    },
-                    "target_field": "content_embedding"
+                        "content": "content_embedding"
+                    }
                 }
             }
         ]

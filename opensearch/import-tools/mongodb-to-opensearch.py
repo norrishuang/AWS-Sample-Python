@@ -135,20 +135,24 @@ def create_embedding_pipeline(opensearch, pipeline_id, model_id):
         # Check if pipeline exists
         opensearch.ingest.get_pipeline(id=pipeline_id)
         print(f"Pipeline {pipeline_id} already exists. Updating...")
-    except:
+    except Exception as e:
         print(f"Creating new pipeline {pipeline_id}...")
     
-    # Create or update pipeline
-    response = opensearch.ingest.put_pipeline(
-        id=pipeline_id,
-        body=pipeline_config
-    )
-    
-    if response.get('acknowledged', False):
-        print(f"Pipeline {pipeline_id} created/updated successfully")
-        return True
-    else:
-        print(f"Failed to create/update pipeline {pipeline_id}")
+    try:
+        # Create or update pipeline
+        response = opensearch.ingest.put_pipeline(
+            id=pipeline_id,
+            body=pipeline_config
+        )
+        
+        if response.get('acknowledged', False):
+            print(f"Pipeline {pipeline_id} created/updated successfully")
+            return True
+        else:
+            print(f"Failed to create/update pipeline {pipeline_id}")
+            return False
+    except Exception as e:
+        print(f"Error creating pipeline: {str(e)}")
         return False
 
 def import_to_opensearch(file_path, opensearch_config):
@@ -171,37 +175,53 @@ def import_to_opensearch(file_path, opensearch_config):
 
     # Check if index exists, create if not
     if not opensearch.indices.exists(index=opensearch_config['index']):
-        # Define index mapping with vector field configuration
-        vector_dimension = opensearch_config.get('vector_dimension', 1024)
-        index_mapping = {
-            "mappings": {
-                "properties": {
-                    "content_embedding": {
-                        "type": "knn_vector",
-                        "dimension": vector_dimension,
-                        "method": {
-                            "name": "hnsw",
-                            "engine": "faiss",
-                            "space_type": "l2",
-                            "parameters": {
-                                "ef_construction": 128,
-                                "m": 16
+        try:
+            # Define index mapping with vector field configuration
+            vector_dimension = opensearch_config.get('vector_dimension', 1024)
+            index_mapping = {
+                "settings": {
+                    "index.knn": True,  # Enable KNN plugin
+                    "index.knn.space_type": "l2"  # Use L2 (Euclidean) distance
+                },
+                "mappings": {
+                    "properties": {
+                        "content_embedding": {
+                            "type": "knn_vector",
+                            "dimension": vector_dimension,
+                            "method": {
+                                "name": "hnsw",
+                                "engine": "faiss",
+                                "space_type": "l2",
+                                "parameters": {
+                                    "ef_construction": 128,
+                                    "m": 16
+                                }
                             }
+                        },
+                        "content": {
+                            "type": "text"
                         }
-                    },
-                    "content": {
-                        "type": "text"
                     }
                 }
             }
-        }
-        
-        # Create index with vector field configuration
-        opensearch.indices.create(
-            index=opensearch_config['index'],
-            body=index_mapping
-        )
-        print(f"Created index: {opensearch_config['index']} with vector field configuration")
+            
+            # Create index with vector field configuration
+            opensearch.indices.create(
+                index=opensearch_config['index'],
+                body=index_mapping
+            )
+            print(f"Created index: {opensearch_config['index']} with vector field configuration")
+        except Exception as e:
+            print(f"Error creating index with KNN configuration: {str(e)}")
+            print("Attempting to create index with basic configuration...")
+            
+            # Fallback to basic index creation without KNN
+            try:
+                opensearch.indices.create(index=opensearch_config['index'])
+                print(f"Created index: {opensearch_config['index']} with basic configuration")
+            except Exception as e2:
+                print(f"Failed to create index: {str(e2)}")
+                return 0, []
     
     # Create embedding pipeline if specified
     pipeline_id = opensearch_config.get('pipeline_id')
@@ -210,26 +230,30 @@ def import_to_opensearch(file_path, opensearch_config):
         print(f"Using pipeline {pipeline_id} for embedding generation")
     
     # Generate actions with pipeline if specified
-    actions = generate_actions(transformed_data, opensearch_config['index'])
+    actions = list(generate_actions(transformed_data, opensearch_config['index']))
     
     # Add pipeline parameter to actions if pipeline is specified
     if pipeline_id:
         actions = [{**action, "pipeline": pipeline_id} for action in actions]
 
     # Bulk import
-    success, failed = bulk(
-        opensearch,
-        actions,
-        chunk_size=1000,
-        max_retries=3,
-        raise_on_error=False
-    )
+    try:
+        success, failed = bulk(
+            opensearch,
+            actions,
+            chunk_size=1000,
+            max_retries=3,
+            raise_on_error=False
+        )
 
-    print(f"Successfully imported {success} documents")
-    if failed:
-        print(f"Failed to import {len(failed)} documents")
+        print(f"Successfully imported {success} documents")
+        if failed:
+            print(f"Failed to import {len(failed)} documents")
 
-    return success, failed
+        return success, failed
+    except Exception as e:
+        print(f"Error during bulk import: {str(e)}")
+        return 0, []
 
 def parse_opensearch_endpoint(endpoint):
     """Parse OpenSearch endpoint to extract host and port."""

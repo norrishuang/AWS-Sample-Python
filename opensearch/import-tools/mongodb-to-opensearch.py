@@ -142,7 +142,6 @@ def create_embedding_pipeline(opensearch, pipeline_id, model_id):
             }
         ]
     }
-    }
     
     try:
         # Check if pipeline exists

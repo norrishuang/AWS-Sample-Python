@@ -16,7 +16,9 @@
 - 算法: HNSW
 - 引擎: FAISS
 - 维度: 1536
-- 数据类型: FP16 (float16)
+- 空间类型: innerproduct (内积)
+- HNSW参数: ef_construction=32, m=8
+- 数据类型: FP16 (使用FAISS的SQ编码器)
 
 ## 使用方法
 
@@ -26,22 +28,41 @@
 pip install opensearch-py numpy faker
 ```
 
-### 运行脚本
+如果使用AWS IAM认证，还需要安装：
+```bash
+pip install requests_aws4auth boto3
+```
+
+### 连接到Amazon OpenSearch Service
+
+```bash
+# 使用基本认证
+python opensearch_vector_benchmark.py --num_docs 10000 --host your-domain.region.es.amazonaws.com --port 443 --user username --password password --index vector_benchmark
+
+# 使用AWS IAM认证
+python opensearch_vector_benchmark.py --num_docs 10000 --host your-domain.region.es.amazonaws.com --port 443 --aws-auth --region your-region --index vector_benchmark
+```
+
+### 连接到自托管OpenSearch
 
 ```bash
 python opensearch_vector_benchmark.py --num_docs 10000 --host localhost --port 9200 --user admin --password admin --index vector_benchmark
 ```
 
-参数说明：
+## 参数说明
+
 - `--num_docs`: 要生成和索引的文档数量（默认：1000）
 - `--host`: OpenSearch主机地址（默认：localhost）
-- `--port`: OpenSearch端口（默认：9200）
+- `--port`: OpenSearch端口（默认：9200，Amazon OpenSearch Service通常为443）
 - `--user`: OpenSearch用户名（默认：admin）
 - `--password`: OpenSearch密码（默认：admin）
 - `--index`: OpenSearch索引名称（默认：vector_benchmark）
+- `--aws-auth`: 使用AWS IAM认证而不是基本认证
+- `--region`: AWS区域，使用AWS IAM认证时必需（默认：us-east-1）
 
 ## 注意事项
 
-- 默认连接到本地OpenSearch实例（localhost:9200）
-- 默认使用基本认证（admin/admin）
+- 连接到Amazon OpenSearch Service时，请使用完整的域端点作为主机名
+- 对于Amazon OpenSearch Service，端口通常为443
+- 确保您的IP地址在OpenSearch域的访问策略中被允许
 - 生产环境中应启用SSL并使用适当的证书

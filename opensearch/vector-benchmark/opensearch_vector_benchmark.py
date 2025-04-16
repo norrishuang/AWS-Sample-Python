@@ -61,16 +61,21 @@ def create_index(client, index_name):
                 "content_vector": {
                     "type": "knn_vector",
                     "dimension": VECTOR_DIMENSION,
+                    "space_type": "innerproduct",
                     "method": {
                         "name": "hnsw",
                         "engine": "faiss",
-                        "space_type": "l2",
                         "parameters": {
-                            "ef_construction": 128,
-                            "m": 16
+                            "encoder": {
+                                "name": "sq",
+                                "parameters": {
+                                    "type": "fp16"
+                                }
+                            },
+                            "ef_construction": 32,
+                            "m": 8
                         }
-                    },
-                    "element_type": "float16"
+                    }
                 }
             }
         }

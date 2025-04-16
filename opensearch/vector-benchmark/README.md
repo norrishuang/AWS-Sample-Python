@@ -72,3 +72,83 @@ python opensearch_vector_benchmark.py --num_docs 10000 --host localhost --port 9
 - 对于Amazon OpenSearch Service，端口通常为443
 - 确保您的IP地址在OpenSearch域的访问策略中被允许
 - 生产环境中应启用SSL并使用适当的证书
+
+
+# 并发查询测试脚本
+
+## 脚本功能
+
+1. 多线程并发查询：使用ThreadPoolExecutor实现并发查询
+2. 随机向量生成：根据指定维度随机生成查询向量
+3. 性能指标收集：
+   • QPS (每秒查询数)
+   • 查询延迟 (P50, P90, P95, P99)
+   • 最小/最大/平均延迟
+4. 实时进度显示：在测试运行期间显示当前QPS和延迟
+
+## 关键组件
+
+1. LatencyTracker类：跟踪和计算延迟统计数据
+2. QueryBenchmark类：执行向量查询并收集性能指标
+3. OpenSearch连接：支持基本认证和AWS IAM认证
+
+## 使用方法
+
+bash
+python opensearch_vector_query_benchmark.py [options]
+
+
+### 参数说明
+
+• --host: OpenSearch主机地址（默认：localhost）
+• --port: OpenSearch端口（默认：9200）
+• --user: OpenSearch用户名（默认：admin）
+• --password: OpenSearch密码（默认：admin）
+• --index: OpenSearch索引名称（默认：vector_benchmark）
+• --aws-auth: 使用AWS IAM认证
+• --region: AWS区域（使用AWS IAM认证时必需）
+• --dimension: 向量维度（默认：1536）
+• --concurrency: 并发查询线程数（默认：10）
+• --duration: 测试持续时间（秒，默认：60）
+• --k: 检索的最近邻数量（默认：10）
+
+### 连接到Amazon OpenSearch Service示例
+
+bash
+# 使用基本认证
+python opensearch_vector_query_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --user username --password password --concurrency 20 --duration 120
+
+# 使用AWS IAM认证
+python opensearch_vector_query_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --aws-auth --region your-region --concurrency 20 --duration 120
+
+
+### 连接到自托管OpenSearch示例
+
+bash
+python opensearch_vector_query_benchmark.py --host localhost --port 9200 --user admin --password admin --dimension 1536 --concurrency 20 --duration 60
+
+
+## 输出结果
+
+脚本运行完成后，将显示详细的性能指标报告，包括：
+
+• 总查询次数
+• 测试持续时间
+• QPS（每秒查询数）
+• 延迟统计（毫秒）：
+• 最小延迟
+• 平均延迟
+• P50（中位数）延迟
+• P90延迟
+• P95延迟
+• P99延迟
+• 最大延迟
+
+## 注意事项
+
+1. 在运行此脚本之前，请确保已经使用 opensearch_vector_benchmark.py 创建了索引并导入了数据
+2. 对于Amazon OpenSearch Service，请使用完整的域端点作为主机名，端口通常为443
+3. 确保您的IP地址在OpenSearch域的访问策略中被允许
+4. 根据您的环境调整并发数和测试持续时间
+
+这个脚本将帮助您评估OpenSearch向量搜索的性能，并提供详细的延迟指标，以便您可以优化您的向量搜索应用程序。

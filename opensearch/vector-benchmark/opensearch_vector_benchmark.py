@@ -47,6 +47,12 @@ def create_opensearch_client(host, port, username, password):
 
 def create_index(client, index_name, num_shards=12, num_replicas=1):
     """Create an OpenSearch index with vector field configuration."""
+    # Check if index exists
+    if client.indices.exists(index=index_name):
+        print(f"Index {index_name} already exists. Skipping index creation.")
+        return {"acknowledged": True, "index": index_name, "status": "exists"}
+    
+    # If index doesn't exist, create it
     index_body = {
         "settings": {
             "index": {
@@ -87,11 +93,6 @@ def create_index(client, index_name, num_shards=12, num_replicas=1):
             }
         }
     }
-    
-    # Check if index exists and delete if it does
-    if client.indices.exists(index=index_name):
-        print(f"Index {index_name} already exists. Deleting...")
-        client.indices.delete(index=index_name)
     
     # Create the index
     response = client.indices.create(index=index_name, body=index_body)

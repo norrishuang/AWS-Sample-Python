@@ -59,6 +59,7 @@ python opensearch_vector_benchmark.py --num_docs 10000 --host localhost --port 9
 - `--index`: OpenSearch索引名称（默认：vector_benchmark）
 - `--aws-auth`: 使用AWS IAM认证而不是基本认证
 - `--region`: AWS区域，使用AWS IAM认证时必需（默认：us-east-1）
+- `--batch-size`: 每批处理的文档数量（默认：100）
 
 ## 注意事项
 

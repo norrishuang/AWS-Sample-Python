@@ -137,16 +137,45 @@ def generate_bulk_documents(num_docs, index_name):
         if (i + 1) % 1000 == 0:
             print(f"Generated {i + 1} documents")
 
-def bulk_index_documents(client, num_docs, index_name):
+def bulk_index_documents(client, num_docs, index_name, batch_size=100):
     """Bulk index the generated documents into OpenSearch."""
     print(f"Indexing {num_docs} documents...")
-    success, failed = helpers.bulk(
-        client,
-        generate_bulk_documents(num_docs, index_name),
-        stats_only=True
-    )
-    print(f"Successfully indexed {success} documents. Failed: {failed}")
-    return success, failed
+    
+    # 减小批量大小以避免请求过大
+    total_success = 0
+    total_failed = 0
+    
+    for i in range(0, num_docs, batch_size):
+        # 计算当前批次的实际大小
+        current_batch_size = min(batch_size, num_docs - i)
+        print(f"Processing batch {i//batch_size + 1}: documents {i+1} to {i+current_batch_size}")
+        
+        # 为当前批次生成文档
+        batch_docs = []
+        for j in range(current_batch_size):
+            doc = generate_random_document()
+            batch_docs.append({
+                "_index": index_name,
+                "_source": doc
+            })
+        
+        # 批量索引当前批次
+        try:
+            success, failed = helpers.bulk(
+                client,
+                batch_docs,
+                stats_only=True,
+                request_timeout=60  # 增加超时时间
+            )
+            total_success += success
+            total_failed += failed
+            print(f"Batch {i//batch_size + 1} completed: {success} succeeded, {failed} failed")
+        except Exception as e:
+            print(f"Error in batch {i//batch_size + 1}: {e}")
+            total_failed += current_batch_size
+    
+    print(f"Indexing complete. Total: {total_success} succeeded, {total_failed} failed")
+    return total_success, total_failed
 
 def main():
     """Main function to parse arguments and execute the script."""
@@ -167,6 +196,8 @@ def main():
                         help='Use AWS IAM authentication instead of basic auth')
     parser.add_argument('--region', type=str, default='us-east-1',
                         help='AWS region for OpenSearch service (required for AWS auth)')
+    parser.add_argument('--batch-size', type=int, default=100,
+                        help='Number of documents to index in each batch (default: 100)')
     
     args = parser.parse_args()
     
@@ -228,7 +259,7 @@ def main():
         create_index(client, args.index)
         
         # Generate and index documents
-        bulk_index_documents(client, args.num_docs, args.index)
+        bulk_index_documents(client, args.num_docs, args.index, args.batch_size)
         
         print(f"Completed indexing {args.num_docs} documents to {args.index}")
         

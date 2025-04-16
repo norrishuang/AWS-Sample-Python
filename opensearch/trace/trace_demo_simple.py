@@ -41,8 +41,8 @@ def sign_request(url, body):
     )
     
     # 添加必要的头信息
-    request.headers.add('Content-Type', 'application/json')
-    request.headers.add('Host', url.replace('https://', '').split('/')[0])
+    request.headers['Content-Type'] = 'application/json'
+    request.headers['Host'] = url.replace('https://', '').split('/')[0]
     
     # 使用 SigV4 签名请求
     auth = SigV4Auth(credentials, 'osis', AWS_REGION)

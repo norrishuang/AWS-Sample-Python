@@ -8,7 +8,11 @@ import random
 import uuid
 import json
 import requests
+import boto3
 from datetime import datetime
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+from aws_requests_auth.aws_auth import AWSRequestsAuth
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -19,6 +23,9 @@ from opentelemetry.instrumentation.requests import RequestsInstrumentor
 
 # OpenSearch Ingestion Pipeline URL
 INGESTION_URL = "https://trace-logs-demo-wwxfoyslntxmqkwjzgnftufjq4.us-east-1.osis.amazonaws.com"
+
+# AWS 区域
+AWS_REGION = "us-east-1"  # 根据你的 OpenSearch 服务所在区域调整
 
 # 模拟的服务名称和版本
 SERVICE_NAME = "demo-web-service"
@@ -50,10 +57,30 @@ def setup_opentelemetry():
     
     trace.set_tracer_provider(TracerProvider(resource=resource))
     
+    # 创建 AWS 认证
+    session = boto3.Session()
+    credentials = session.get_credentials()
+    
     # 配置 OTLP exporter，将数据发送到 OpenSearch Ingestion Pipeline
+    # 使用 AWS SigV4 认证
+    auth = AWSRequestsAuth(
+        aws_access_key=credentials.access_key,
+        aws_secret_access_key=credentials.secret_key,
+        aws_token=credentials.token,
+        aws_host=INGESTION_URL.replace("https://", ""),
+        aws_region=AWS_REGION,
+        aws_service="osis"
+    )
+    
     otlp_exporter = OTLPSpanExporter(
         endpoint=f"{INGESTION_URL}/v1/traces",
-        headers={}  # 如果需要认证，可以在这里添加
+        # 使用自定义的 http 客户端来添加 AWS SigV4 认证
+        http_client=lambda url, headers, timeout: requests.post(
+            url=url,
+            headers=headers,
+            timeout=timeout,
+            auth=auth
+        )
     )
     
     span_processor = BatchSpanProcessor(otlp_exporter)
@@ -161,6 +188,8 @@ def main():
             time.sleep(random.uniform(0.2, 1.0))
     except Exception as e:
         print(f"发生错误: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         # 确保所有 spans 都被导出
         time.sleep(5)

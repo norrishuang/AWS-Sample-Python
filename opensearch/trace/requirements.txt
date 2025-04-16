@@ -3,3 +3,6 @@ opentelemetry-sdk
 opentelemetry-exporter-otlp-proto-http
 opentelemetry-instrumentation-requests
 requests
+boto3
+botocore
+aws-requests-auth

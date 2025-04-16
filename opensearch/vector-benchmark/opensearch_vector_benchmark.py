@@ -36,7 +36,7 @@ def create_opensearch_client(host, port, username, password):
         hosts=[{'host': host, 'port': port}],
         http_auth=(username, password),
         use_ssl=USE_SSL,
-        verify_certs=False,  # Set to True in production with proper certificates
+        verify_certs=False,  # Set to False for development without certificates
         ssl_show_warn=False
     )
     return client
@@ -164,8 +164,13 @@ def main():
         client = create_opensearch_client(args.host, args.port, args.user, args.password)
         
         # Check if OpenSearch is running
-        if not client.ping():
-            print("Could not connect to OpenSearch. Please check if it's running.")
+        try:
+            if not client.ping():
+                print("Could not connect to OpenSearch. Please check if it's running.")
+                return
+        except Exception as e:
+            print(f"Connection error: {e}")
+            print("Could not connect to OpenSearch. Please check your connection settings and if OpenSearch is running.")
             return
         
         # Create index

@@ -45,13 +45,15 @@ def create_opensearch_client(host, port, username, password):
     )
     return client
 
-def create_index(client, index_name):
+def create_index(client, index_name, num_shards=12, num_replicas=1):
     """Create an OpenSearch index with vector field configuration."""
     index_body = {
         "settings": {
             "index": {
                 "knn": True,
-                "knn.algo_param.ef_search": 100
+                "knn.algo_param.ef_search": 100,
+                "number_of_shards": num_shards,
+                "number_of_replicas": num_replicas
             }
         },
         "mappings": {
@@ -235,6 +237,10 @@ def main():
                         help='Minimum number of terms in sparse vectors (default: 20)')
     parser.add_argument('--max-sparse-terms', type=int, default=40,
                         help='Maximum number of terms in sparse vectors (default: 40)')
+    parser.add_argument('--shards', type=int, default=12,
+                        help='Number of primary shards for the index (default: 12)')
+    parser.add_argument('--replicas', type=int, default=1,
+                        help='Number of replica shards for the index (default: 1)')
     
     args = parser.parse_args()
     
@@ -293,7 +299,7 @@ def main():
             return
         
         # Create index
-        create_index(client, args.index)
+        create_index(client, args.index, args.shards, args.replicas)
         
         # Generate and index documents
         bulk_index_documents(client, args.num_docs, args.index, args.batch_size, 

@@ -63,6 +63,8 @@ python opensearch_vector_benchmark.py --num_docs 10000 --host localhost --port 9
 - `--batch-size`: 每批处理的文档数量（默认：100）
 - `--min-sparse-terms`: 稀疏向量中的最小词语数量（默认：20）
 - `--max-sparse-terms`: 稀疏向量中的最大词语数量（默认：40）
+- `--shards`: 索引的主分片数量（默认：12）
+- `--replicas`: 索引的副本分片数量（默认：1）
 
 ## 注意事项
 

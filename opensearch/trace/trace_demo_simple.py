@@ -143,8 +143,8 @@ def main():
     print(f"开始发送简单的 trace 数据到 {INGESTION_URL}/v1/logs")
     
     # 发送 5 个简单的 trace
-    for i in range(5):
-        print(f"\n生成并发送 trace {i+1}/5...")
+    for i in range(1000):
+        print(f"\n生成并发送 trace {i+1}/1000...")
         trace_data = generate_trace_data()
         success = send_trace_data(trace_data)
         

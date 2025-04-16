@@ -107,8 +107,8 @@ def generate_trace_data():
 
 # 发送 trace 数据到 OpenSearch Ingestion Pipeline
 def send_trace_data(trace_data):
-    # 修改为正确的端点 /v1/logs 而不是 /v1/traces
-    url = f"{INGESTION_URL}/v1/logs"
+    # 使用 /v1/traces 端点
+    url = f"{INGESTION_URL}/v1/traces"
     
     try:
         # 获取签名后的头信息
@@ -140,11 +140,11 @@ def send_trace_data(trace_data):
         return False
 
 def main():
-    print(f"开始发送简单的 trace 数据到 {INGESTION_URL}/v1/logs")
+    print(f"开始发送简单的 trace 数据到 {INGESTION_URL}/v1/traces")
     
     # 发送 5 个简单的 trace
-    for i in range(1000):
-        print(f"\n生成并发送 trace {i+1}/1000...")
+    for i in range(5):
+        print(f"\n生成并发送 trace {i+1}/5...")
         trace_data = generate_trace_data()
         success = send_trace_data(trace_data)
         

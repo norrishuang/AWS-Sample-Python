@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 OpenSearch Trace Demo - 简化版本，直接使用 HTTP 请求发送 trace 数据
+基于 OpenSearch Ingestion Pipeline 的配置示例
 """
 
 import time
@@ -9,8 +10,9 @@ import uuid
 import json
 import requests
 import boto3
-from datetime import datetime
-from aws_requests_auth.aws_auth import AWSRequestsAuth
+import datetime
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
 
 # OpenSearch Ingestion Pipeline URL
 INGESTION_URL = "https://trace-logs-demo-wwxfoyslntxmqkwjzgnftufjq4.us-east-1.osis.amazonaws.com"
@@ -21,25 +23,32 @@ AWS_REGION = "us-east-1"  # 根据你的 OpenSearch 服务所在区域调整
 # 模拟的服务名称
 SERVICE_NAME = "demo-web-service"
 
-# 创建 AWS SigV4 认证
-def create_aws_auth():
+# 使用 botocore 的 SigV4Auth 进行请求签名
+def sign_request(url, body):
     session = boto3.Session()
-    credentials = session.get_credentials()
+    credentials = session.get_credentials().get_frozen_credentials()
     
-    # 打印认证信息（不包含敏感数据）
     print(f"使用 AWS 凭证: {credentials.access_key[:4]}...{credentials.access_key[-4:]}")
     print(f"AWS 区域: {AWS_REGION}")
     print(f"AWS 服务: osis")
-    print(f"目标主机: {INGESTION_URL.replace('https://', '')}")
+    print(f"目标 URL: {url}")
     
-    return AWSRequestsAuth(
-        aws_access_key=credentials.access_key,
-        aws_secret_access_key=credentials.secret_key,
-        aws_token=credentials.token,
-        aws_host=INGESTION_URL.replace("https://", ""),
-        aws_region=AWS_REGION,
-        aws_service="osis"
+    # 创建 AWS 请求对象
+    request = AWSRequest(
+        method='POST',
+        url=url,
+        data=json.dumps(body)
     )
+    
+    # 添加必要的头信息
+    request.headers.add('Content-Type', 'application/json')
+    request.headers.add('Host', url.replace('https://', '').split('/')[0])
+    
+    # 使用 SigV4 签名请求
+    auth = SigV4Auth(credentials, 'osis', AWS_REGION)
+    auth.add_auth(request)
+    
+    return request.headers
 
 # 生成一个简单的 trace 数据
 def generate_trace_data():
@@ -98,25 +107,24 @@ def generate_trace_data():
 
 # 发送 trace 数据到 OpenSearch Ingestion Pipeline
 def send_trace_data(trace_data):
-    auth = create_aws_auth()
+    url = f"{INGESTION_URL}/v1/traces"
     
     try:
-        # 启用详细的 HTTP 调试
-        import logging
-        import http.client as http_client
-        http_client.HTTPConnection.debuglevel = 1
-        logging.basicConfig()
-        logging.getLogger().setLevel(logging.DEBUG)
-        requests_log = logging.getLogger("requests.packages.urllib3")
-        requests_log.setLevel(logging.DEBUG)
-        requests_log.propagate = True
+        # 获取签名后的头信息
+        headers = sign_request(url, trace_data)
         
-        print(f"发送请求到: {INGESTION_URL}/v1/traces")
+        # 打印请求信息
+        print(f"\n发送请求到: {url}")
+        print(f"请求头:")
+        for key, value in headers.items():
+            if key.lower() not in ('authorization'):  # 不打印敏感信息
+                print(f"  {key}: {value}")
         
+        # 发送请求
         response = requests.post(
-            f"{INGESTION_URL}/v1/traces",
+            url,
             json=trace_data,
-            auth=auth
+            headers=headers
         )
         
         print(f"响应状态码: {response.status_code}")
@@ -133,9 +141,9 @@ def send_trace_data(trace_data):
 def main():
     print(f"开始发送简单的 trace 数据到 {INGESTION_URL}")
     
-    # 发送 10 个简单的 trace
-    for i in range(10):
-        print(f"\n生成并发送 trace {i+1}/10...")
+    # 发送 5 个简单的 trace
+    for i in range(5):
+        print(f"\n生成并发送 trace {i+1}/5...")
         trace_data = generate_trace_data()
         success = send_trace_data(trace_data)
         

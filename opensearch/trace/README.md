@@ -6,7 +6,8 @@
 
 - `trace_demo.py` - 使用 OpenTelemetry 库生成和发送 trace 数据
 - `trace_demo_alternative.py` - 使用直接 HTTP 请求生成和发送复杂的 trace 数据
-- `trace_demo_simple.py` - 使用直接 HTTP 请求生成和发送简单的 trace 数据（最简单的方案）
+- `trace_demo_simple.py` - 使用直接 HTTP 请求生成和发送简单的 trace 数据（推荐）
+- `trace_demo_jaeger.py` - 使用 Jaeger 格式生成和发送 trace 数据
 - `requirements.txt` - 项目依赖
 
 ## 安装依赖
@@ -17,7 +18,17 @@ pip install -r requirements.txt
 
 ## 运行演示
 
-使用 OpenTelemetry 方式:
+使用简单的 HTTP 请求方式（推荐）:
+```bash
+python trace_demo_simple.py
+```
+
+或者使用 Jaeger 格式:
+```bash
+python trace_demo_jaeger.py
+```
+
+或者使用 OpenTelemetry 方式:
 ```bash
 python trace_demo.py
 ```
@@ -25,11 +36,6 @@ python trace_demo.py
 或者使用直接 HTTP 请求方式（复杂版本）:
 ```bash
 python trace_demo_alternative.py
-```
-
-或者使用最简单的方式（推荐先尝试这个）:
-```bash
-python trace_demo_simple.py
 ```
 
 ## AWS 认证
@@ -52,7 +58,7 @@ export AWS_SESSION_TOKEN=your_session_token  # 如果使用临时凭证
 
 这个演示程序会：
 
-1. 初始化 OpenTelemetry 追踪系统（或直接创建 OTLP 格式的 trace 数据）
+1. 初始化 OpenTelemetry 追踪系统（或直接创建 OTLP/Jaeger 格式的 trace 数据）
 2. 模拟多个 HTTP 请求，包括不同的：
    - API 端点
    - HTTP 方法

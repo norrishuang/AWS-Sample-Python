@@ -144,9 +144,8 @@ def generate_jaeger_trace():
 
 # 发送 Jaeger 格式的 trace 数据到 OpenSearch Ingestion Pipeline
 def send_jaeger_trace(trace_data):
-    # 根据配置示例，我们应该发送到 Jaeger gRPC 端点
-    # 但由于 gRPC 需要额外的库，我们这里使用 HTTP 端点作为示例
-    url = f"{INGESTION_URL}/v1/traces"
+    # 修改为正确的端点 /v1/logs 而不是 /v1/traces
+    url = f"{INGESTION_URL}/v1/logs"
     
     try:
         # 获取签名后的头信息
@@ -178,7 +177,7 @@ def send_jaeger_trace(trace_data):
         return False
 
 def main():
-    print(f"开始发送 Jaeger 格式的 trace 数据到 {INGESTION_URL}")
+    print(f"开始发送 Jaeger 格式的 trace 数据到 {INGESTION_URL}/v1/logs")
     
     # 发送 5 个 trace
     for i in range(5):

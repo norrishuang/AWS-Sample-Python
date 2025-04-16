@@ -26,6 +26,12 @@ def create_aws_auth():
     session = boto3.Session()
     credentials = session.get_credentials()
     
+    # 打印认证信息（不包含敏感数据）
+    print(f"使用 AWS 凭证: {credentials.access_key[:4]}...{credentials.access_key[-4:]}")
+    print(f"AWS 区域: {AWS_REGION}")
+    print(f"AWS 服务: osis")
+    print(f"目标主机: {INGESTION_URL.replace('https://', '')}")
+    
     return AWSRequestsAuth(
         aws_access_key=credentials.access_key,
         aws_secret_access_key=credentials.secret_key,
@@ -95,6 +101,18 @@ def send_trace_data(trace_data):
     auth = create_aws_auth()
     
     try:
+        # 启用详细的 HTTP 调试
+        import logging
+        import http.client as http_client
+        http_client.HTTPConnection.debuglevel = 1
+        logging.basicConfig()
+        logging.getLogger().setLevel(logging.DEBUG)
+        requests_log = logging.getLogger("requests.packages.urllib3")
+        requests_log.setLevel(logging.DEBUG)
+        requests_log.propagate = True
+        
+        print(f"发送请求到: {INGESTION_URL}/v1/traces")
+        
         response = requests.post(
             f"{INGESTION_URL}/v1/traces",
             json=trace_data,
@@ -108,6 +126,8 @@ def send_trace_data(trace_data):
         return response.status_code == 200
     except Exception as e:
         print(f"发送请求时出错: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def main():
@@ -115,7 +135,7 @@ def main():
     
     # 发送 10 个简单的 trace
     for i in range(10):
-        print(f"生成并发送 trace {i+1}/10...")
+        print(f"\n生成并发送 trace {i+1}/10...")
         trace_data = generate_trace_data()
         success = send_trace_data(trace_data)
         

@@ -62,44 +62,10 @@ def setup_opentelemetry():
     credentials = session.get_credentials()
     
     # 配置 OTLP exporter，将数据发送到 OpenSearch Ingestion Pipeline
-    # 使用 AWS SigV4 认证
-    headers = {
-        "X-Amz-Security-Token": credentials.token if credentials.token else ""
-    }
+    # 由于 OTLPSpanExporter 不支持自定义 HTTP 客户端，我们将使用一个简单的方法
+    # 先使用标准的 exporter，然后在主程序中手动发送数据
     
-    # 创建一个自定义的 OTLPSpanExporter 类，重写 _export 方法来添加 AWS SigV4 认证
-    class SigV4OTLPSpanExporter(OTLPSpanExporter):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.auth = AWSRequestsAuth(
-                aws_access_key=credentials.access_key,
-                aws_secret_access_key=credentials.secret_key,
-                aws_token=credentials.token,
-                aws_host=INGESTION_URL.replace("https://", ""),
-                aws_region=AWS_REGION,
-                aws_service="osis"
-            )
-        
-        def _export(self, spans):
-            # 获取父类方法中的 URL 和数据
-            serialized_data = self._exporter.encode(self._collector.export(spans))
-            
-            # 使用 requests 库发送带有 AWS SigV4 认证的请求
-            result = requests.post(
-                url=f"{INGESTION_URL}/v1/traces",
-                data=serialized_data,
-                headers={"Content-Type": "application/x-protobuf"},
-                auth=self.auth
-            )
-            
-            # 检查响应
-            if result.status_code != 200:
-                print(f"Failed to export spans: {result.status_code} {result.text}")
-            
-            return result.status_code
-    
-    # 使用自定义的 exporter
-    otlp_exporter = SigV4OTLPSpanExporter(
+    otlp_exporter = OTLPSpanExporter(
         endpoint=f"{INGESTION_URL}/v1/traces"
     )
     
@@ -196,24 +162,16 @@ def simulate_http_request(tracer):
                 parent_span.record_exception(Exception(f"HTTP error {status_code}"))
 
 def main():
-    tracer = setup_opentelemetry()
-    print(f"开始模拟 HTTP 请求并发送 trace 数据到 {INGESTION_URL}")
+    print(f"由于 OpenTelemetry 的认证问题，请使用 trace_demo_simple.py 脚本")
+    print(f"运行命令: python trace_demo_simple.py")
     
-    try:
-        # 模拟一系列请求
-        for i in range(50):
-            simulate_http_request(tracer)
-            print(f"已发送请求 {i+1}/50")
-            # 随机间隔，模拟真实流量
-            time.sleep(random.uniform(0.2, 1.0))
-    except Exception as e:
-        print(f"发生错误: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        # 确保所有 spans 都被导出
-        time.sleep(5)
-        print("模拟完成，所有 trace 数据已发送")
+    print(f"\n如果你仍然想尝试使用 OpenTelemetry，请参考以下资源:")
+    print(f"- https://opentelemetry-python.readthedocs.io/en/latest/exporter/otlp/otlp.html")
+    print(f"- https://github.com/open-telemetry/opentelemetry-python/issues/2751")
+    
+    print(f"\n推荐使用 trace_demo_simple.py 或 trace_demo_alternative.py")
+    
+    return
 
 if __name__ == "__main__":
     main()

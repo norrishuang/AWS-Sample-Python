@@ -10,6 +10,7 @@
 - `date`: 随机生成的日期（日期格式）
 - `tag`: 随机生成的标签列表（字符串数组）
 - `content_vector`: 1536维的随机浮点数向量（用于向量搜索）
+- `content_sparse_vector`: 稀疏向量，包含20-40个随机词语及其权重（用于稀疏向量搜索）
 
 ## 向量索引配置
 
@@ -60,6 +61,8 @@ python opensearch_vector_benchmark.py --num_docs 10000 --host localhost --port 9
 - `--aws-auth`: 使用AWS IAM认证而不是基本认证
 - `--region`: AWS区域，使用AWS IAM认证时必需（默认：us-east-1）
 - `--batch-size`: 每批处理的文档数量（默认：100）
+- `--min-sparse-terms`: 稀疏向量中的最小词语数量（默认：20）
+- `--max-sparse-terms`: 稀疏向量中的最大词语数量（默认：40）
 
 ## 注意事项
 

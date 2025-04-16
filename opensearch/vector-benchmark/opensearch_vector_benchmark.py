@@ -4,7 +4,8 @@ OpenSearch Vector Benchmark Data Generator
 
 This script generates random simulated data and imports it into OpenSearch.
 The data structure includes content (string), platform (string), date (date),
-tag (list), and content_vector (1536-dimensional array).
+tag (list), content_vector (1536-dimensional array), and content_sparse_vector
+(sparse vector with 20-40 terms).
 """
 
 import argparse
@@ -15,6 +16,7 @@ import random
 import string
 from opensearchpy import OpenSearch, helpers, RequestsHttpConnection
 from faker import Faker
+import re
 
 # Initialize Faker for generating random text
 fake = Faker()
@@ -29,6 +31,8 @@ USE_SSL = True  # Amazon OpenSearch Service requires HTTPS
 # Default index settings
 INDEX_NAME = 'vector_benchmark'
 VECTOR_DIMENSION = 1536
+MIN_SPARSE_TERMS = 20
+MAX_SPARSE_TERMS = 40
 
 def create_opensearch_client(host, port, username, password):
     """Create and return an OpenSearch client for Amazon OpenSearch Service."""
@@ -76,6 +80,9 @@ def create_index(client, index_name):
                             "m": 8
                         }
                     }
+                },
+                "content_sparse_vector": {
+                    "type": "rank_features"
                 }
             }
         }
@@ -94,6 +101,33 @@ def create_index(client, index_name):
 def generate_random_vector(dimension=VECTOR_DIMENSION):
     """Generate a random vector with the specified dimension."""
     return np.random.uniform(-1, 1, dimension).tolist()
+
+def generate_random_sparse_vector(min_terms=MIN_SPARSE_TERMS, max_terms=MAX_SPARSE_TERMS):
+    """Generate a random sparse vector with terms between min_terms and max_terms.
+    
+    Returns:
+        dict: A dictionary where keys are term indices and values are term weights
+    """
+    # Generate a vocabulary of random words
+    vocabulary = []
+    for _ in range(1000):  # Create a pool of 1000 potential terms
+        word = ''.join(random.choice(string.ascii_lowercase) for _ in range(random.randint(3, 10)))
+        vocabulary.append(word)
+    
+    # Select random number of terms between min_terms and max_terms
+    num_terms = random.randint(min_terms, max_terms)
+    
+    # Select random terms from vocabulary and assign random weights
+    selected_terms = random.sample(vocabulary, num_terms)
+    
+    # Create sparse vector as dictionary {term: weight}
+    sparse_vector = {}
+    for term in selected_terms:
+        # Generate a random weight between 0.1 and 1.0
+        weight = round(random.uniform(0.1, 1.0), 3)
+        sparse_vector[term] = weight
+    
+    return sparse_vector
 
 def generate_random_tags(max_tags=5):
     """Generate a random list of tags."""
@@ -123,7 +157,8 @@ def generate_random_document():
         "platform": generate_random_platform(),
         "date": generate_random_date(),
         "tag": generate_random_tags(),
-        "content_vector": generate_random_vector()
+        "content_vector": generate_random_vector(),
+        "content_sparse_vector": generate_random_sparse_vector()
     }
 
 def generate_bulk_documents(num_docs, index_name):
@@ -198,8 +233,17 @@ def main():
                         help='AWS region for OpenSearch service (required for AWS auth)')
     parser.add_argument('--batch-size', type=int, default=100,
                         help='Number of documents to index in each batch (default: 100)')
+    parser.add_argument('--min-sparse-terms', type=int, default=MIN_SPARSE_TERMS,
+                        help=f'Minimum number of terms in sparse vectors (default: {MIN_SPARSE_TERMS})')
+    parser.add_argument('--max-sparse-terms', type=int, default=MAX_SPARSE_TERMS,
+                        help=f'Maximum number of terms in sparse vectors (default: {MAX_SPARSE_TERMS})')
     
     args = parser.parse_args()
+    
+    # Update global constants if provided in arguments
+    global MIN_SPARSE_TERMS, MAX_SPARSE_TERMS
+    MIN_SPARSE_TERMS = args.min_sparse_terms
+    MAX_SPARSE_TERMS = args.max_sparse_terms
     
     try:
         # Create OpenSearch client

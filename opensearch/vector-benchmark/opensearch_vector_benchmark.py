@@ -13,7 +13,7 @@ import json
 import numpy as np
 import random
 import string
-from opensearchpy import OpenSearch, helpers
+from opensearchpy import OpenSearch, helpers, RequestsHttpConnection
 from faker import Faker
 
 # Initialize Faker for generating random text
@@ -24,20 +24,22 @@ OPENSEARCH_HOST = 'localhost'
 OPENSEARCH_PORT = 9200
 OPENSEARCH_USER = 'admin'
 OPENSEARCH_PASSWORD = 'admin'
-USE_SSL = False  # Set to True for production with proper certificates
+USE_SSL = True  # Amazon OpenSearch Service requires HTTPS
 
 # Default index settings
 INDEX_NAME = 'vector_benchmark'
 VECTOR_DIMENSION = 1536
 
 def create_opensearch_client(host, port, username, password):
-    """Create and return an OpenSearch client."""
+    """Create and return an OpenSearch client for Amazon OpenSearch Service."""
     client = OpenSearch(
-        hosts=[{'host': host, 'port': port}],
+        hosts=[{'host': host, 'port': int(port)}],
         http_auth=(username, password),
         use_ssl=USE_SSL,
         verify_certs=False,  # Set to False for development without certificates
-        ssl_show_warn=False
+        ssl_show_warn=False,
+        connection_class=RequestsHttpConnection,
+        timeout=60  # Increase timeout for better reliability
     )
     return client
 
@@ -147,30 +149,74 @@ def main():
     parser.add_argument('--num_docs', type=int, default=1000,
                         help='Number of documents to generate and index')
     parser.add_argument('--host', type=str, default=OPENSEARCH_HOST,
-                        help='OpenSearch host')
+                        help='OpenSearch host (for Amazon OpenSearch Service, use the full domain endpoint)')
     parser.add_argument('--port', type=int, default=OPENSEARCH_PORT,
-                        help='OpenSearch port')
+                        help='OpenSearch port (usually 443 for Amazon OpenSearch Service)')
     parser.add_argument('--user', type=str, default=OPENSEARCH_USER,
                         help='OpenSearch username')
     parser.add_argument('--password', type=str, default=OPENSEARCH_PASSWORD,
                         help='OpenSearch password')
     parser.add_argument('--index', type=str, default=INDEX_NAME,
                         help='OpenSearch index name')
+    parser.add_argument('--aws-auth', action='store_true',
+                        help='Use AWS IAM authentication instead of basic auth')
+    parser.add_argument('--region', type=str, default='us-east-1',
+                        help='AWS region for OpenSearch service (required for AWS auth)')
     
     args = parser.parse_args()
     
     try:
         # Create OpenSearch client
-        client = create_opensearch_client(args.host, args.port, args.user, args.password)
+        print(f"Connecting to OpenSearch at {args.host}:{args.port}...")
+        
+        if args.aws_auth:
+            try:
+                from requests_aws4auth import AWS4Auth
+                import boto3
+                
+                if not args.region:
+                    print("Error: --region is required when using --aws-auth")
+                    return
+                
+                # Get AWS credentials
+                session = boto3.Session()
+                credentials = session.get_credentials()
+                aws_auth = AWS4Auth(
+                    credentials.access_key,
+                    credentials.secret_key,
+                    args.region,
+                    'es',
+                    session_token=credentials.token
+                )
+                
+                # Create client with AWS auth
+                client = OpenSearch(
+                    hosts=[{'host': args.host, 'port': int(args.port)}],
+                    http_auth=aws_auth,
+                    use_ssl=True,
+                    verify_certs=False,
+                    connection_class=RequestsHttpConnection,
+                    timeout=60
+                )
+            except ImportError:
+                print("Error: AWS authentication requires 'requests_aws4auth' package.")
+                print("Please install it with: pip install requests_aws4auth")
+                return
+        else:
+            # Create client with basic auth
+            client = create_opensearch_client(args.host, args.port, args.user, args.password)
         
         # Check if OpenSearch is running
         try:
-            if not client.ping():
-                print("Could not connect to OpenSearch. Please check if it's running.")
-                return
+            info = client.info()
+            print(f"Successfully connected to OpenSearch. Version: {info.get('version', {}).get('number', 'unknown')}")
         except Exception as e:
             print(f"Connection error: {e}")
-            print("Could not connect to OpenSearch. Please check your connection settings and if OpenSearch is running.")
+            print("\nTroubleshooting tips:")
+            print("1. For Amazon OpenSearch Service, make sure you're using the full domain endpoint as host")
+            print("2. The port should typically be 443 for Amazon OpenSearch Service")
+            print("3. Verify your credentials or IAM permissions")
+            print("4. Check if your IP is allowed in the access policy")
             return
         
         # Create index

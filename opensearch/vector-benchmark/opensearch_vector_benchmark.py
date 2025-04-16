@@ -31,8 +31,6 @@ USE_SSL = True  # Amazon OpenSearch Service requires HTTPS
 # Default index settings
 INDEX_NAME = 'vector_benchmark'
 VECTOR_DIMENSION = 1536
-MIN_SPARSE_TERMS = 20
-MAX_SPARSE_TERMS = 40
 
 def create_opensearch_client(host, port, username, password):
     """Create and return an OpenSearch client for Amazon OpenSearch Service."""
@@ -102,7 +100,7 @@ def generate_random_vector(dimension=VECTOR_DIMENSION):
     """Generate a random vector with the specified dimension."""
     return np.random.uniform(-1, 1, dimension).tolist()
 
-def generate_random_sparse_vector(min_terms=MIN_SPARSE_TERMS, max_terms=MAX_SPARSE_TERMS):
+def generate_random_sparse_vector(min_terms=20, max_terms=40):
     """Generate a random sparse vector with terms between min_terms and max_terms.
     
     Returns:
@@ -150,7 +148,7 @@ def generate_random_date(start_date=datetime.date(2020, 1, 1)):
     random_date = start_date + datetime.timedelta(days=random_number_of_days)
     return random_date.isoformat()
 
-def generate_random_document():
+def generate_random_document(min_sparse_terms=20, max_sparse_terms=40):
     """Generate a random document with the required fields."""
     return {
         "content": fake.paragraph(nb_sentences=random.randint(3, 8)),
@@ -158,13 +156,13 @@ def generate_random_document():
         "date": generate_random_date(),
         "tag": generate_random_tags(),
         "content_vector": generate_random_vector(),
-        "content_sparse_vector": generate_random_sparse_vector()
+        "content_sparse_vector": generate_random_sparse_vector(min_sparse_terms, max_sparse_terms)
     }
 
-def generate_bulk_documents(num_docs, index_name):
+def generate_bulk_documents(num_docs, index_name, min_sparse_terms=20, max_sparse_terms=40):
     """Generate multiple documents for bulk indexing."""
     for i in range(num_docs):
-        doc = generate_random_document()
+        doc = generate_random_document(min_sparse_terms, max_sparse_terms)
         yield {
             "_index": index_name,
             "_source": doc
@@ -172,7 +170,7 @@ def generate_bulk_documents(num_docs, index_name):
         if (i + 1) % 1000 == 0:
             print(f"Generated {i + 1} documents")
 
-def bulk_index_documents(client, num_docs, index_name, batch_size=100):
+def bulk_index_documents(client, num_docs, index_name, batch_size=100, min_sparse_terms=20, max_sparse_terms=40):
     """Bulk index the generated documents into OpenSearch."""
     print(f"Indexing {num_docs} documents...")
     
@@ -188,7 +186,7 @@ def bulk_index_documents(client, num_docs, index_name, batch_size=100):
         # 为当前批次生成文档
         batch_docs = []
         for j in range(current_batch_size):
-            doc = generate_random_document()
+            doc = generate_random_document(min_sparse_terms, max_sparse_terms)
             batch_docs.append({
                 "_index": index_name,
                 "_source": doc
@@ -233,17 +231,12 @@ def main():
                         help='AWS region for OpenSearch service (required for AWS auth)')
     parser.add_argument('--batch-size', type=int, default=100,
                         help='Number of documents to index in each batch (default: 100)')
-    parser.add_argument('--min-sparse-terms', type=int, default=MIN_SPARSE_TERMS,
-                        help=f'Minimum number of terms in sparse vectors (default: {MIN_SPARSE_TERMS})')
-    parser.add_argument('--max-sparse-terms', type=int, default=MAX_SPARSE_TERMS,
-                        help=f'Maximum number of terms in sparse vectors (default: {MAX_SPARSE_TERMS})')
+    parser.add_argument('--min-sparse-terms', type=int, default=20,
+                        help='Minimum number of terms in sparse vectors (default: 20)')
+    parser.add_argument('--max-sparse-terms', type=int, default=40,
+                        help='Maximum number of terms in sparse vectors (default: 40)')
     
     args = parser.parse_args()
-    
-    # Update global constants if provided in arguments
-    global MIN_SPARSE_TERMS, MAX_SPARSE_TERMS
-    MIN_SPARSE_TERMS = args.min_sparse_terms
-    MAX_SPARSE_TERMS = args.max_sparse_terms
     
     try:
         # Create OpenSearch client
@@ -303,7 +296,8 @@ def main():
         create_index(client, args.index)
         
         # Generate and index documents
-        bulk_index_documents(client, args.num_docs, args.index, args.batch_size)
+        bulk_index_documents(client, args.num_docs, args.index, args.batch_size, 
+                            args.min_sparse_terms, args.max_sparse_terms)
         
         print(f"Completed indexing {args.num_docs} documents to {args.index}")
         

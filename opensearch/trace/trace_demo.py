@@ -63,24 +63,44 @@ def setup_opentelemetry():
     
     # 配置 OTLP exporter，将数据发送到 OpenSearch Ingestion Pipeline
     # 使用 AWS SigV4 认证
-    auth = AWSRequestsAuth(
-        aws_access_key=credentials.access_key,
-        aws_secret_access_key=credentials.secret_key,
-        aws_token=credentials.token,
-        aws_host=INGESTION_URL.replace("https://", ""),
-        aws_region=AWS_REGION,
-        aws_service="osis"
-    )
+    headers = {
+        "X-Amz-Security-Token": credentials.token if credentials.token else ""
+    }
     
-    otlp_exporter = OTLPSpanExporter(
-        endpoint=f"{INGESTION_URL}/v1/traces",
-        # 使用自定义的 http 客户端来添加 AWS SigV4 认证
-        http_client=lambda url, headers, timeout: requests.post(
-            url=url,
-            headers=headers,
-            timeout=timeout,
-            auth=auth
-        )
+    # 创建一个自定义的 OTLPSpanExporter 类，重写 _export 方法来添加 AWS SigV4 认证
+    class SigV4OTLPSpanExporter(OTLPSpanExporter):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.auth = AWSRequestsAuth(
+                aws_access_key=credentials.access_key,
+                aws_secret_access_key=credentials.secret_key,
+                aws_token=credentials.token,
+                aws_host=INGESTION_URL.replace("https://", ""),
+                aws_region=AWS_REGION,
+                aws_service="osis"
+            )
+        
+        def _export(self, spans):
+            # 获取父类方法中的 URL 和数据
+            serialized_data = self._exporter.encode(self._collector.export(spans))
+            
+            # 使用 requests 库发送带有 AWS SigV4 认证的请求
+            result = requests.post(
+                url=f"{INGESTION_URL}/v1/traces",
+                data=serialized_data,
+                headers={"Content-Type": "application/x-protobuf"},
+                auth=self.auth
+            )
+            
+            # 检查响应
+            if result.status_code != 200:
+                print(f"Failed to export spans: {result.status_code} {result.text}")
+            
+            return result.status_code
+    
+    # 使用自定义的 exporter
+    otlp_exporter = SigV4OTLPSpanExporter(
+        endpoint=f"{INGESTION_URL}/v1/traces"
     )
     
     span_processor = BatchSpanProcessor(otlp_exporter)

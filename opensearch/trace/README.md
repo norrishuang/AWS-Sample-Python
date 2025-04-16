@@ -5,7 +5,8 @@
 ## 项目结构
 
 - `trace_demo.py` - 使用 OpenTelemetry 库生成和发送 trace 数据
-- `trace_demo_alternative.py` - 使用直接 HTTP 请求生成和发送 trace 数据（备选方案）
+- `trace_demo_alternative.py` - 使用直接 HTTP 请求生成和发送复杂的 trace 数据
+- `trace_demo_simple.py` - 使用直接 HTTP 请求生成和发送简单的 trace 数据（最简单的方案）
 - `requirements.txt` - 项目依赖
 
 ## 安装依赖
@@ -16,14 +17,19 @@ pip install -r requirements.txt
 
 ## 运行演示
 
-使用 OpenTelemetry 方式（推荐）:
+使用 OpenTelemetry 方式:
 ```bash
 python trace_demo.py
 ```
 
-或者使用直接 HTTP 请求方式:
+或者使用直接 HTTP 请求方式（复杂版本）:
 ```bash
 python trace_demo_alternative.py
+```
+
+或者使用最简单的方式（推荐先尝试这个）:
+```bash
+python trace_demo_simple.py
 ```
 
 ## AWS 认证
@@ -73,3 +79,12 @@ export AWS_SESSION_TOKEN=your_session_token  # 如果使用临时凭证
 ## 查看结果
 
 发送数据后，你可以在 OpenSearch Dashboard 中查看生成的 trace 数据。通常可以在 Trace Analytics 部分找到这些数据。
+
+## 故障排除
+
+如果遇到认证问题，请检查：
+1. AWS 凭证是否有效
+2. AWS 区域是否正确
+3. 是否有权限访问 OpenSearch Ingestion Pipeline
+
+如果遇到其他问题，可以尝试使用 `trace_demo_simple.py` 脚本，它是最简单的实现，更容易排查问题。

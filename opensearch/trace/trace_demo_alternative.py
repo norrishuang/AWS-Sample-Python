@@ -13,7 +13,7 @@ from datetime import datetime
 from aws_requests_auth.aws_auth import AWSRequestsAuth
 
 # OpenSearch Ingestion Pipeline URL
-INGESTION_URL = "https://trace-logs-demo-wwxfoyslntxmqkwjzgnftufjq4.us-east-1.osis.amazonaws.com"
+INGESTION_URL = "https://trace-analysis-pipeline-prs2hjjormceysqqvbud6r6eyu.us-east-1.osis.amazonaws.com"
 
 # AWS 区域
 AWS_REGION = "us-east-1"  # 根据你的 OpenSearch 服务所在区域调整

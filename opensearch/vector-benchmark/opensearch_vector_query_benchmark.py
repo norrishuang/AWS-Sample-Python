@@ -3,24 +3,19 @@
 OpenSearch Vector Query Benchmark
 
 This script performs concurrent vector search queries against OpenSearch
-and collects performance metrics including QPS and latency percentiles.
+using process-based parallelism and collects performance metrics including QPS and latency percentiles.
 """
 
 import argparse
 import datetime
-import json
 import numpy as np
-import random
-import string
 import time
-import threading
-import queue
 import statistics
+import multiprocessing
 from collections import deque
 from opensearchpy import OpenSearch, RequestsHttpConnection
 import sys
-import math
-from concurrent.futures import ThreadPoolExecutor
+import os
 
 # Default OpenSearch connection settings
 OPENSEARCH_HOST = 'localhost'
@@ -32,173 +27,9 @@ USE_SSL = True  # Amazon OpenSearch Service requires HTTPS
 # Default index settings
 INDEX_NAME = 'vector_benchmark'
 VECTOR_DIMENSION = 1536
-DEFAULT_CONCURRENCY = 10
+DEFAULT_CONCURRENCY = 4  # Default to 4 processes
 DEFAULT_DURATION = 60  # seconds
 DEFAULT_K = 10  # Number of nearest neighbors to retrieve
-
-class LatencyTracker:
-    """Track and calculate latency statistics."""
-    
-    def __init__(self, window_size=1000):
-        self.latencies = deque(maxlen=window_size)
-        self.lock = threading.Lock()
-    
-    def add_latency(self, latency_ms):
-        """Add a latency measurement."""
-        with self.lock:
-            self.latencies.append(latency_ms)
-    
-    def get_percentile(self, percentile):
-        """Calculate the specified percentile of latencies."""
-        with self.lock:
-            if not self.latencies:
-                return 0
-            sorted_latencies = sorted(self.latencies)
-            idx = int(len(sorted_latencies) * percentile / 100)
-            return sorted_latencies[idx]
-    
-    def get_stats(self):
-        """Get all latency statistics."""
-        with self.lock:
-            if not self.latencies:
-                return {
-                    "count": 0,
-                    "min": 0,
-                    "max": 0,
-                    "mean": 0,
-                    "p50": 0,
-                    "p90": 0,
-                    "p95": 0,
-                    "p99": 0
-                }
-            
-            sorted_latencies = sorted(self.latencies)
-            return {
-                "count": len(sorted_latencies),
-                "min": min(sorted_latencies),
-                "max": max(sorted_latencies),
-                "mean": statistics.mean(sorted_latencies),
-                "p50": self.get_percentile(50),
-                "p90": self.get_percentile(90),
-                "p95": self.get_percentile(95),
-                "p99": self.get_percentile(99)
-            }
-
-class QueryBenchmark:
-    """Benchmark OpenSearch vector queries."""
-    
-    def __init__(self, client, index_name, vector_dimension, k=10):
-        self.client = client
-        self.index_name = index_name
-        self.vector_dimension = vector_dimension
-        self.k = k
-        self.latency_tracker = LatencyTracker()
-        self.query_count = 0
-        self.query_count_lock = threading.Lock()
-        self.running = False
-        self.start_time = None
-        self.end_time = None
-    
-    def generate_random_vector(self):
-        """Generate a random vector with the specified dimension."""
-        return np.random.uniform(-1, 1, self.vector_dimension).tolist()
-    
-    def perform_vector_search(self):
-        """Perform a single vector search query."""
-        # Generate random vector for search
-        query_vector = self.generate_random_vector()
-        
-        # Prepare query
-        query = {
-            "size": self.k,
-            "query": {
-                "knn": {
-                    "content_vector": {
-                        "vector": query_vector,
-                        "k": self.k
-                    }
-                }
-            }
-        }
-        
-        try:
-            # Execute search
-            start_time = time.time()
-            response = self.client.search(
-                body=query,
-                index=self.index_name
-            )
-            end_time = time.time()
-            
-            # Extract the took field (in milliseconds)
-            took_ms = response.get('took', 0)
-            
-            # Update metrics
-            self.latency_trcker.add_latency(took_ms)
-            with self.query_count_lock:
-                self.query_count += 1
-            
-            return True
-        except Exception as e:
-            print(f"Search error: {e}")
-            return False
-    
-    def worker(self):
-        """Worker function for query threads."""
-        while self.running:
-            self.perform_vector_search()
-    
-    def run_benchmark(self, concurrency, duration_seconds):
-        """Run the benchmark with specified concurrency for a set duration."""
-        self.running = True
-        self.start_time = time.time()
-        self.query_count = 0
-        
-        print(f"Starting benchmark with {concurrency} concurrent threads for {duration_seconds} seconds...")
-        
-        # Create and start worker threads
-        with ThreadPoolExecutor(max_workers=concurrency) as executor:
-            futures = [executor.submit(self.worker) for _ in range(concurrency)]
-            
-            # Monitor and report progress
-            try:
-                elapsed = 0
-                while elapsed < duration_seconds:
-                    time.sleep(1)
-                    elapsed = time.time() - self.start_time
-                    current_qps = self.query_count / elapsed if elapsed > 0 else 0
-                    stats = self.latency_tracker.get_stats()
-                    
-                    # Print progress update
-                    sys.stdout.write(f"\rRunning: {elapsed:.1f}s | "
-                                    f"Queries: {self.query_count} | "
-                                    f"QPS: {current_qps:.1f} | "
-                                    f"P50: {stats['p50']:.1f}ms | "
-                                    f"P99: {stats['p99']:.1f}ms")
-                    sys.stdout.flush()
-            
-            finally:
-                # Stop the benchmark
-                self.running = False
-                self.end_time = time.time()
-                
-                # Wait for all futures to complete
-                for future in futures:
-                    try:
-                        future.result(timeout=2)  # Wait up to 2 seconds for each future
-                    except Exception:
-                        pass  # Ignore any exceptions
-        
-        # Calculate final results
-        actual_duration = self.end_time - self.start_time
-        qps = self.query_count / actual_duration if actual_duration > 0 else 0
-        
-        return {
-            "queries": self.query_count,
-            "duration_seconds": actual_duration,
-            "qps": qps,
-            "latency": self.latency_tracker.get_stats()
-        }
 
 def create_opensearch_client(host, port, username, password):
     """Create and return an OpenSearch client."""
@@ -212,6 +43,142 @@ def create_opensearch_client(host, port, username, password):
         timeout=60  # Increase timeout for better reliability
     )
     return client
+
+def perform_query(args):
+    """Execute a single vector query and return the latency."""
+    host, port, user, password, index_name, vector_dimension, k, query_id = args
+    
+    # Create client for this process
+    client = create_opensearch_client(host, port, user, password)
+    
+    # Generate random vector
+    vector = np.random.uniform(-1, 1, vector_dimension).tolist()
+    
+    # Prepare query
+    query = {
+        "size": k,
+        "query": {
+            "knn": {
+                "content_vector": {
+                    "vector": vector,
+                    "k": k
+                }
+            }
+        }
+    }
+    
+    try:
+        start_time = time.time()
+        response = client.search(body=query, index=index_name)
+        end_time = time.time()
+        
+        # Extract the took field (in milliseconds)
+        took_ms = response.get('took', 0)
+        return took_ms
+    except Exception as e:
+        print(f"Query {query_id} error: {e}")
+        return None
+
+def run_benchmark(host, port, user, password, index_name, vector_dimension, k, concurrency, duration_seconds):
+    """Run the benchmark with specified parameters."""
+    print(f"Starting benchmark with {concurrency} concurrent processes for {duration_seconds} seconds...")
+    
+    # Setup multiprocessing manager for shared state
+    manager = multiprocessing.Manager()
+    latencies = manager.list()
+    query_count = manager.Value('i', 0)
+    stop_flag = manager.Value('b', False)
+    
+    def worker(worker_id):
+        """Worker function to execute queries until stop flag is set."""
+        query_id = 0
+        while not stop_flag.value:
+            query_id += 1
+            args = (host, port, user, password, index_name, vector_dimension, k, f"{worker_id}-{query_id}")
+            result = perform_query(args)
+            if result is not None:
+                latencies.append(result)
+                with query_count.get_lock():
+                    query_count.value += 1
+    
+    # Start worker processes
+    processes = []
+    start_time = time.time()
+    
+    for i in range(concurrency):
+        p = multiprocessing.Process(target=worker, args=(i,))
+        p.daemon = True  # Set as daemon so they will terminate when main process exits
+        p.start()
+        processes.append(p)
+    
+    # Monitor progress
+    try:
+        while time.time() - start_time < duration_seconds:
+            elapsed = time.time() - start_time
+            current_qps = query_count.value / elapsed if elapsed > 0 else 0
+            
+            # Calculate current statistics
+            current_latencies = list(latencies)
+            if current_latencies:
+                sorted_latencies = sorted(current_latencies)
+                p50 = sorted_latencies[len(sorted_latencies) // 2] if sorted_latencies else 0
+                p99_idx = int(len(sorted_latencies) * 0.99) if sorted_latencies else 0
+                p99 = sorted_latencies[p99_idx] if p99_idx < len(sorted_latencies) else 0
+            else:
+                p50 = 0
+                p99 = 0
+            
+            # Print progress update
+            sys.stdout.write(f"\rRunning: {elapsed:.1f}s | "
+                            f"Queries: {query_count.value} | "
+                            f"QPS: {current_qps:.1f} | "
+                            f"P50: {p50:.1f}ms | "
+                            f"P99: {p99:.1f}ms")
+            sys.stdout.flush()
+            
+            time.sleep(1)
+    
+    finally:
+        # Signal workers to stop
+        stop_flag.value = True
+        
+        # Wait a moment for processes to finish current queries
+        time.sleep(2)
+        
+        # Terminate any remaining processes
+        for p in processes:
+            if p.is_alive():
+                p.terminate()
+                p.join(1)
+    
+    end_time = time.time()
+    actual_duration = end_time - start_time
+    
+    # Calculate final results
+    final_latencies = list(latencies)
+    if not final_latencies:
+        print("\nNo successful queries were executed.")
+        return None
+    
+    sorted_latencies = sorted(final_latencies)
+    qps = len(final_latencies) / actual_duration
+    
+    stats = {
+        "queries": len(final_latencies),
+        "duration_seconds": actual_duration,
+        "qps": qps,
+        "latency": {
+            "min": min(sorted_latencies),
+            "max": max(sorted_latencies),
+            "mean": statistics.mean(sorted_latencies),
+            "p50": sorted_latencies[len(sorted_latencies) // 2],
+            "p90": sorted_latencies[int(len(sorted_latencies) * 0.9)],
+            "p95": sorted_latencies[int(len(sorted_latencies) * 0.95)],
+            "p99": sorted_latencies[int(len(sorted_latencies) * 0.99)]
+        }
+    }
+    
+    return stats
 
 def main():
     """Main function to parse arguments and execute the benchmark."""
@@ -233,7 +200,7 @@ def main():
     parser.add_argument('--dimension', type=int, default=VECTOR_DIMENSION,
                         help=f'Vector dimension (default: {VECTOR_DIMENSION})')
     parser.add_argument('--concurrency', type=int, default=DEFAULT_CONCURRENCY,
-                        help=f'Number of concurrent query threads (default: {DEFAULT_CONCURRENCY})')
+                        help=f'Number of concurrent processes (default: {DEFAULT_CONCURRENCY})')
     parser.add_argument('--duration', type=int, default=DEFAULT_DURATION,
                         help=f'Benchmark duration in seconds (default: {DEFAULT_DURATION})')
     parser.add_argument('--k', type=int, default=DEFAULT_K,
@@ -242,7 +209,7 @@ def main():
     args = parser.parse_args()
     
     try:
-        # Create OpenSearch client
+        # Create OpenSearch client for initial checks
         print(f"Connecting to OpenSearch at {args.host}:{args.port}...")
         
         if args.aws_auth:
@@ -301,29 +268,43 @@ def main():
             print("Please create the index first using opensearch_vector_benchmark.py")
             return
         
-        # Create and run benchmark
-        benchmark = QueryBenchmark(client, args.index, args.dimension, args.k)
-        results = benchmark.run_benchmark(args.concurrency, args.duration)
+        # Run benchmark
+        results = run_benchmark(
+            host=args.host,
+            port=args.port,
+            user=args.user,
+            password=args.password,
+            index_name=args.index,
+            vector_dimension=args.dimension,
+            k=args.k,
+            concurrency=args.concurrency,
+            duration_seconds=args.duration
+        )
         
-        # Print results
-        print("\n\n" + "="*50)
-        print("BENCHMARK RESULTS")
-        print("="*50)
-        print(f"Total queries: {results['queries']}")
-        print(f"Duration: {results['duration_seconds']:.2f} seconds")
-        print(f"QPS (queries per second): {results['qps']:.2f}")
-        print("\nLatency Statistics (milliseconds):")
-        print(f"  Min: {results['latency']['min']:.2f} ms")
-        print(f"  Mean: {results['latency']['mean']:.2f} ms")
-        print(f"  P50: {results['latency']['p50']:.2f} ms")
-        print(f"  P90: {results['latency']['p90']:.2f} ms")
-        print(f"  P95: {results['latency']['p95']:.2f} ms")
-        print(f"  P99: {results['latency']['p99']:.2f} ms")
-        print(f"  Max: {results['latency']['max']:.2f} ms")
-        print("="*50)
+        if results:
+            # Print results
+            print("\n\n" + "="*50)
+            print("BENCHMARK RESULTS")
+            print("="*50)
+            print(f"Total queries: {results['queries']}")
+            print(f"Duration: {results['duration_seconds']:.2f} seconds")
+            print(f"QPS (queries per second): {results['qps']:.2f}")
+            print("\nLatency Statistics (milliseconds):")
+            print(f"  Min: {results['latency']['min']:.2f} ms")
+            print(f"  Mean: {results['latency']['mean']:.2f} ms")
+            print(f"  P50: {results['latency']['p50']:.2f} ms")
+            print(f"  P90: {results['latency']['p90']:.2f} ms")
+            print(f"  P95: {results['latency']['p95']:.2f} ms")
+            print(f"  P99: {results['latency']['p99']:.2f} ms")
+            print(f"  Max: {results['latency']['max']:.2f} ms")
+            print("="*50)
         
     except Exception as e:
         print(f"Error: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
 
 if __name__ == "__main__":
+    # Set start method for multiprocessing
+    multiprocessing.set_start_method('spawn', force=True)
     main()

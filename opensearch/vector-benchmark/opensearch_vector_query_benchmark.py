@@ -44,40 +44,45 @@ def create_opensearch_client(host, port, username, password):
     )
     return client
 
-def perform_query(args):
-    """Execute a single vector query and return the latency."""
-    host, port, user, password, index_name, vector_dimension, k, query_id = args
+def worker_process(args):
+    """Worker function to execute queries until stop flag is set."""
+    host, port, user, password, index_name, vector_dimension, k, worker_id, stop_flag, latencies, query_count = args
     
     # Create client for this process
     client = create_opensearch_client(host, port, user, password)
     
-    # Generate random vector
-    vector = np.random.uniform(-1, 1, vector_dimension).tolist()
-    
-    # Prepare query
-    query = {
-        "size": k,
-        "query": {
-            "knn": {
-                "content_vector": {
-                    "vector": vector,
-                    "k": k
+    query_id = 0
+    while not stop_flag.value:
+        query_id += 1
+        
+        # Generate random vector
+        vector = np.random.uniform(-1, 1, vector_dimension).tolist()
+        
+        # Prepare query
+        query = {
+            "size": k,
+            "query": {
+                "knn": {
+                    "content_vector": {
+                        "vector": vector,
+                        "k": k
+                    }
                 }
             }
         }
-    }
-    
-    try:
-        start_time = time.time()
-        response = client.search(body=query, index=index_name)
-        end_time = time.time()
         
-        # Extract the took field (in milliseconds)
-        took_ms = response.get('took', 0)
-        return took_ms
-    except Exception as e:
-        print(f"Query {query_id} error: {e}")
-        return None
+        try:
+            start_time = time.time()
+            response = client.search(body=query, index=index_name)
+            end_time = time.time()
+            
+            # Extract the took field (in milliseconds)
+            took_ms = response.get('took', 0)
+            latencies.append(took_ms)
+            with query_count.get_lock():
+                query_count.value += 1
+        except Exception as e:
+            print(f"Query {worker_id}-{query_id} error: {e}")
 
 def run_benchmark(host, port, user, password, index_name, vector_dimension, k, concurrency, duration_seconds):
     """Run the benchmark with specified parameters."""
@@ -89,24 +94,13 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     query_count = manager.Value('i', 0)
     stop_flag = manager.Value('b', False)
     
-    def worker(worker_id):
-        """Worker function to execute queries until stop flag is set."""
-        query_id = 0
-        while not stop_flag.value:
-            query_id += 1
-            args = (host, port, user, password, index_name, vector_dimension, k, f"{worker_id}-{query_id}")
-            result = perform_query(args)
-            if result is not None:
-                latencies.append(result)
-                with query_count.get_lock():
-                    query_count.value += 1
-    
     # Start worker processes
     processes = []
     start_time = time.time()
     
     for i in range(concurrency):
-        p = multiprocessing.Process(target=worker, args=(i,))
+        args = (host, port, user, password, index_name, vector_dimension, k, i, stop_flag, latencies, query_count)
+        p = multiprocessing.Process(target=worker_process, args=(args,))
         p.daemon = True  # Set as daemon so they will terminate when main process exits
         p.start()
         processes.append(p)
@@ -306,5 +300,9 @@ def main():
 
 if __name__ == "__main__":
     # Set start method for multiprocessing
-    multiprocessing.set_start_method('spawn', force=True)
+    try:
+        multiprocessing.set_start_method('spawn')
+    except RuntimeError:
+        # Method already set
+        pass
     main()

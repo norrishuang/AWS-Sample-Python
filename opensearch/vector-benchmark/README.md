@@ -74,7 +74,7 @@ python opensearch_vector_benchmark.py --num_docs 10000 --host localhost --port 9
 - 生产环境中应启用SSL并使用适当的证书
 
 
-# 并发查询测试脚本
+# 并发查询测试脚本(Dense Vector)
 
 ## 脚本功能
 
@@ -94,9 +94,9 @@ python opensearch_vector_benchmark.py --num_docs 10000 --host localhost --port 9
 
 ## 使用方法
 
-bash
+```shell
 python opensearch_vector_query_benchmark.py [options]
-
+```
 
 ### 参数说明
 
@@ -116,17 +116,20 @@ python opensearch_vector_query_benchmark.py [options]
 
 bash
 # 使用基本认证
+```shell
 python opensearch_vector_query_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --user username --password password --concurrency 20 --duration 120
+```
 
 # 使用AWS IAM认证
+```shell
 python opensearch_vector_query_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --aws-auth --region your-region --concurrency 20 --duration 120
-
+```
 
 ### 连接到自托管OpenSearch示例
 
-bash
+```shell
 python opensearch_vector_query_benchmark.py --host localhost --port 9200 --user admin --password admin --dimension 1536 --concurrency 20 --duration 60
-
+```
 
 ## 输出结果
 
@@ -152,3 +155,68 @@ python opensearch_vector_query_benchmark.py --host localhost --port 9200 --user 
 4. 根据您的环境调整并发数和测试持续时间
 
 这个脚本将帮助您评估OpenSearch向量搜索的性能，并提供详细的延迟指标，以便您可以优化您的向量搜索应用程序。
+
+
+# 并发查询测试脚本(Sparse Vector)
+
+## 脚本功能特点
+
+1. 稀疏向量查询生成：
+   • 从索引中采样文档，提取真实的稀疏向量词条
+   • 随机选择 3-8 个词条（可配置）构建查询
+   • 随机使用不同的 rank_feature 函数（saturation、log、sigmoid）
+
+2. 多进程并发测试：
+   • 使用 Python 的 multiprocessing 模块实现真正的并行查询
+   • 可配置并发进程数量
+
+3. 性能指标收集：
+   • QPS (每秒查询数)
+   • 查询延迟统计 (最小、最大、平均、P50、P90、P95、P99)
+   • 实时进度显示
+
+## 使用方法
+
+bash
+# 基本用法
+```shell
+python opensearch_sparse_vector_query_benchmark.py --host localhost --port 9200 --user admin --password admin
+```
+
+# 连接到 Amazon OpenSearch Service (使用基本认证)
+```shell
+python opensearch_sparse_vector_query_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --user username --password password
+```
+
+# 连接到 Amazon OpenSearch Service (使用 AWS IAM 认证)
+```shell
+python opensearch_sparse_vector_query_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --aws-auth --region your-region
+```
+
+# 自定义测试参数
+```shell
+python opensearch_sparse_vector_query_benchmark.py --concurrency 20 --duration 120 --min-terms 5 --max-terms 10
+```
+
+## 参数说明
+
+• --host: OpenSearch 主机地址（默认：localhost）
+• --port: OpenSearch 端口（默认：9200）
+• --user: OpenSearch 用户名（默认：admin）
+• --password: OpenSearch 密码（默认：admin）
+• --index: OpenSearch 索引名称（默认：vector_benchmark）
+• --aws-auth: 使用 AWS IAM 认证
+• --region: AWS 区域（使用 AWS IAM 认证时必需）
+• --concurrency: 并发查询进程数（默认：4）
+• --duration: 测试持续时间（秒，默认：60）
+• --k: 检索的结果数量（默认：10）
+• --min-terms: 每个查询中的最小词条数（默认：3）
+• --max-terms: 每个查询中的最大词条数（默认：8）
+• --sample-size: 用于提取词条的文档采样数量（默认：100）
+
+## 查询生成机制
+
+脚本会从索引中采样文档，提取真实的稀疏向量词条，然后随机选择词条构建查询。每个查询会使用 bool.should 组合多个 rank_feature 查询，并随机选择不同的 rank_feature 函数（saturation、log、sigmoid）以
+模拟真实的查询场景。
+
+这个脚本将帮助你评估 OpenSearch 稀疏向量搜索的性能，并提供详细的延迟指标，以便你可以优化你的稀疏向量搜索应用程序。

@@ -46,7 +46,7 @@ def create_opensearch_client(host, port, username, password):
 
 def worker_process(args):
     """Worker function to execute queries until stop flag is set."""
-    host, port, user, password, index_name, vector_dimension, k, worker_id, stop_flag, latencies, query_count = args
+    host, port, user, password, index_name, vector_dimension, k, worker_id, stop_flag, latencies, query_count_dict = args
     
     # Create client for this process
     client = create_opensearch_client(host, port, user, password)
@@ -79,8 +79,11 @@ def worker_process(args):
             # Extract the took field (in milliseconds)
             took_ms = response.get('took', 0)
             latencies.append(took_ms)
-            with query_count.get_lock():
-                query_count.value += 1
+            
+            # Update query count using the dictionary
+            with query_count_dict.get_lock():
+                query_count_dict['count'] += 1
+                
         except Exception as e:
             print(f"Query {worker_id}-{query_id} error: {e}")
 
@@ -91,7 +94,8 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     # Setup multiprocessing manager for shared state
     manager = multiprocessing.Manager()
     latencies = manager.list()
-    query_count = manager.Value('i', 0)
+    query_count_dict = manager.dict()
+    query_count_dict['count'] = 0
     stop_flag = manager.Value('b', False)
     
     # Start worker processes
@@ -99,7 +103,7 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     start_time = time.time()
     
     for i in range(concurrency):
-        args = (host, port, user, password, index_name, vector_dimension, k, i, stop_flag, latencies, query_count)
+        args = (host, port, user, password, index_name, vector_dimension, k, i, stop_flag, latencies, query_count_dict)
         p = multiprocessing.Process(target=worker_process, args=(args,))
         p.daemon = True  # Set as daemon so they will terminate when main process exits
         p.start()
@@ -109,7 +113,7 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     try:
         while time.time() - start_time < duration_seconds:
             elapsed = time.time() - start_time
-            current_qps = query_count.value / elapsed if elapsed > 0 else 0
+            current_qps = query_count_dict['count'] / elapsed if elapsed > 0 else 0
             
             # Calculate current statistics
             current_latencies = list(latencies)
@@ -124,7 +128,7 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
             
             # Print progress update
             sys.stdout.write(f"\rRunning: {elapsed:.1f}s | "
-                            f"Queries: {query_count.value} | "
+                            f"Queries: {query_count_dict['count']} | "
                             f"QPS: {current_qps:.1f} | "
                             f"P50: {p50:.1f}ms | "
                             f"P99: {p99:.1f}ms")

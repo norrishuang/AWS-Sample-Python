@@ -30,7 +30,7 @@ USE_SSL = True  # Amazon OpenSearch Service requires HTTPS
 
 # Default index settings
 INDEX_NAME = 'vector_benchmark'
-VECTOR_DIMENSION = 1536
+VECTOR_DIMENSION = 1536  # Default vector dimension
 
 def create_opensearch_client(host, port, username, password):
     """Create and return an OpenSearch client for Amazon OpenSearch Service."""
@@ -45,7 +45,7 @@ def create_opensearch_client(host, port, username, password):
     )
     return client
 
-def create_index(client, index_name, num_shards=12, num_replicas=1):
+def create_index(client, index_name, vector_dimension=VECTOR_DIMENSION, num_shards=12, num_replicas=1):
     """Create an OpenSearch index with vector field configuration."""
     # Check if index exists
     if client.indices.exists(index=index_name):
@@ -70,7 +70,7 @@ def create_index(client, index_name, num_shards=12, num_replicas=1):
                 "tag": {"type": "keyword"},
                 "content_vector": {
                     "type": "knn_vector",
-                    "dimension": VECTOR_DIMENSION,
+                    "dimension": vector_dimension,
                     "space_type": "innerproduct",
                     "method": {
                         "name": "hnsw",
@@ -151,21 +151,21 @@ def generate_random_date(start_date=datetime.date(2020, 1, 1)):
     random_date = start_date + datetime.timedelta(days=random_number_of_days)
     return random_date.isoformat()
 
-def generate_random_document(min_sparse_terms=20, max_sparse_terms=40):
+def generate_random_document(dimension=VECTOR_DIMENSION, min_sparse_terms=20, max_sparse_terms=40):
     """Generate a random document with the required fields."""
     return {
         "content": fake.paragraph(nb_sentences=random.randint(3, 8)),
         "platform": generate_random_platform(),
         "date": generate_random_date(),
         "tag": generate_random_tags(),
-        "content_vector": generate_random_vector(),
+        "content_vector": generate_random_vector(dimension),
         "content_sparse_vector": generate_random_sparse_vector(min_sparse_terms, max_sparse_terms)
     }
 
-def generate_bulk_documents(num_docs, index_name, min_sparse_terms=20, max_sparse_terms=40):
+def generate_bulk_documents(num_docs, index_name, dimension=VECTOR_DIMENSION, min_sparse_terms=20, max_sparse_terms=40):
     """Generate multiple documents for bulk indexing."""
     for i in range(num_docs):
-        doc = generate_random_document(min_sparse_terms, max_sparse_terms)
+        doc = generate_random_document(dimension, min_sparse_terms, max_sparse_terms)
         yield {
             "_index": index_name,
             "_source": doc
@@ -173,7 +173,7 @@ def generate_bulk_documents(num_docs, index_name, min_sparse_terms=20, max_spars
         if (i + 1) % 1000 == 0:
             print(f"Generated {i + 1} documents")
 
-def bulk_index_documents(client, num_docs, index_name, batch_size=100, min_sparse_terms=20, max_sparse_terms=40):
+def bulk_index_documents(client, num_docs, index_name, batch_size=100, dimension=VECTOR_DIMENSION, min_sparse_terms=20, max_sparse_terms=40):
     """Bulk index the generated documents into OpenSearch."""
     print(f"Indexing {num_docs} documents...")
     
@@ -189,7 +189,7 @@ def bulk_index_documents(client, num_docs, index_name, batch_size=100, min_spars
         # 为当前批次生成文档
         batch_docs = []
         for j in range(current_batch_size):
-            doc = generate_random_document(min_sparse_terms, max_sparse_terms)
+            doc = generate_random_document(dimension, min_sparse_terms, max_sparse_terms)
             batch_docs.append({
                 "_index": index_name,
                 "_source": doc
@@ -238,6 +238,8 @@ def main():
                         help='Minimum number of terms in sparse vectors (default: 20)')
     parser.add_argument('--max-sparse-terms', type=int, default=40,
                         help='Maximum number of terms in sparse vectors (default: 40)')
+    parser.add_argument('--dimension', type=int, default=VECTOR_DIMENSION,
+                        help=f'Vector dimension for content_vector (default: {VECTOR_DIMENSION})')
     parser.add_argument('--shards', type=int, default=12,
                         help='Number of primary shards for the index (default: 12)')
     parser.add_argument('--replicas', type=int, default=1,
@@ -300,11 +302,11 @@ def main():
             return
         
         # Create index
-        create_index(client, args.index, args.shards, args.replicas)
+        create_index(client, args.index, args.dimension, args.shards, args.replicas)
         
         # Generate and index documents
         bulk_index_documents(client, args.num_docs, args.index, args.batch_size, 
-                            args.min_sparse_terms, args.max_sparse_terms)
+                            args.dimension, args.min_sparse_terms, args.max_sparse_terms)
         
         print(f"Completed indexing {args.num_docs} documents to {args.index}")
         

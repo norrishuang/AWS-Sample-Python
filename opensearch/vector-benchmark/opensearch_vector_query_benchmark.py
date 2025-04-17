@@ -105,10 +105,10 @@ class QueryBenchmark:
     
     def perform_vector_search(self):
         """Perform a single vector search query."""
-        print("Starting vector search query...")
+        # Generate random vector for search
         query_vector = self.generate_random_vector()
-        print(f"Generated random vector with dimension {len(query_vector)}")
         
+        # Prepare query
         query = {
             "size": self.k,
             "query": {
@@ -120,49 +120,33 @@ class QueryBenchmark:
                 }
             }
         }
-        print(f"Query prepared: searching for {self.k} nearest neighbors")
         
         try:
-            print(f"Sending search request to OpenSearch index '{self.index_name}'...")
+            # Execute search
             start_time = time.time()
-            print(f"Request started at: {datetime.datetime.now().strftime('%H:%M:%S.%f')}")
             response = self.client.search(
                 body=query,
                 index=self.index_name
             )
             end_time = time.time()
-            print(f"Request completed at: {datetime.datetime.now().strftime('%H:%M:%S.%f')}")
-            print(f"Search completed in {(end_time - start_time) * 1000:.2f} ms")
             
             # Extract the took field (in milliseconds)
             took_ms = response.get('took', 0)
-            print(f"OpenSearch reported query time: {took_ms} ms")
-            print(f"Found {len(response['hits']['hits'])} results")
             
             # Update metrics
             self.latency_tracker.add_latency(took_ms)
             with self.query_count_lock:
                 self.query_count += 1
-                print(f"Total queries completed so far: {self.query_count}")
             
             return True
         except Exception as e:
             print(f"Search error: {e}")
-            print(f"Error type: {type(e).__name__}")
-            import traceback
-            print(f"Traceback: {traceback.format_exc()}")
             return False
     
     def worker(self):
         """Worker function for query threads."""
-        print(f"Worker thread started at {datetime.datetime.now().strftime('%H:%M:%S.%f')}")
         while self.running:
-            print(f"Worker executing query at {datetime.datetime.now().strftime('%H:%M:%S.%f')}")
-            result = self.perform_vector_search()
-            print(f"Query completed with result: {result}")
-            if not result:
-                print("Query failed, sleeping for 1 second before retry...")
-                time.sleep(1)
+            self.perform_vector_search()
     
     def run_benchmark(self, concurrency, duration_seconds):
         """Run the benchmark with specified concurrency for a set duration."""
@@ -171,15 +155,10 @@ class QueryBenchmark:
         self.query_count = 0
         
         print(f"Starting benchmark with {concurrency} concurrent threads for {duration_seconds} seconds...")
-        print(f"Vector dimension: {self.vector_dimension}, K: {self.k}")
-        print(f"Benchmark start time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         # Create and start worker threads
-        print(f"Creating {concurrency} worker threads...")
         with ThreadPoolExecutor(max_workers=concurrency) as executor:
-            print("ThreadPoolExecutor created, submitting worker tasks...")
             futures = [executor.submit(self.worker) for _ in range(concurrency)]
-            print(f"{len(futures)} worker tasks submitted")
             
             # Monitor and report progress
             try:
@@ -197,44 +176,22 @@ class QueryBenchmark:
                                     f"P50: {stats['p50']:.1f}ms | "
                                     f"P99: {stats['p99']:.1f}ms")
                     sys.stdout.flush()
-                    print("")  # Add a newline for better debug output visibility
             
             finally:
                 # Stop the benchmark
-                print("\nBenchmark duration completed, stopping workers...")
                 self.running = False
                 self.end_time = time.time()
-                print(f"Benchmark end time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                print("Waiting for all worker threads to complete...")
+                
                 # Wait for all futures to complete
                 for future in futures:
                     try:
-                        future.result(timeout=5)  # Wait up to 5 seconds for each future
-                    except Exception as e:
-                        print(f"Worker thread error: {e}")
+                        future.result(timeout=2)  # Wait up to 2 seconds for each future
+                    except Exception:
+                        pass  # Ignore any exceptions
         
         # Calculate final results
         actual_duration = self.end_time - self.start_time
         qps = self.query_count / actual_duration if actual_duration > 0 else 0
-        print(f"Benchmark completed. Total queries: {self.query_count}, Duration: {actual_duration:.2f}s, QPS: {qps:.2f}")
-        
-        # Print detailed results immediately
-        stats = self.latency_tracker.get_stats()
-        print("\n" + "="*50)
-        print("BENCHMARK RESULTS (PRELIMINARY)")
-        print("="*50)
-        print(f"Total queries: {self.query_count}")
-        print(f"Duration: {actual_duration:.2f} seconds")
-        print(f"QPS (queries per second): {qps:.2f}")
-        print("\nLatency Statistics (milliseconds):")
-        print(f"  Min: {stats['min']:.2f} ms")
-        print(f"  Mean: {stats['mean']:.2f} ms")
-        print(f"  P50: {stats['p50']:.2f} ms")
-        print(f"  P90: {stats['p90']:.2f} ms")
-        print(f"  P95: {stats['p95']:.2f} ms")
-        print(f"  P99: {stats['p99']:.2f} ms")
-        print(f"  Max: {stats['max']:.2f} ms")
-        print("="*50)
         
         return {
             "queries": self.query_count,
@@ -323,12 +280,10 @@ def main():
                 return
         else:
             # Create client with basic auth
-            print(f"Creating OpenSearch client with basic auth (user: {args.user})...")
             client = create_opensearch_client(args.host, args.port, args.user, args.password)
         
         # Check if OpenSearch is running
         try:
-            print("Testing connection to OpenSearch...")
             info = client.info()
             print(f"Successfully connected to OpenSearch. Version: {info.get('version', {}).get('number', 'unknown')}")
         except Exception as e:
@@ -341,53 +296,18 @@ def main():
             return
         
         # Check if index exists
-        print(f"Checking if index '{args.index}' exists...")
         if not client.indices.exists(index=args.index):
             print(f"Error: Index '{args.index}' does not exist.")
             print("Please create the index first using opensearch_vector_benchmark.py")
             return
-        else:
-            print(f"Index '{args.index}' exists.")
-            
-            # Check index stats
-            try:
-                print("Retrieving index statistics...")
-                index_stats = client.indices.stats(index=args.index)
-                doc_count = index_stats['indices'][args.index]['total']['docs']['count']
-                print(f"Index '{args.index}' contains {doc_count} documents")
-                if doc_count == 0:
-                    print("Warning: Index exists but contains no documents!")
-            except Exception as e:
-                print(f"Error checking index stats: {e}")
-        
-        # Test a simple query
-        try:
-            print("Testing a simple search query...")
-            test_query = {"query": {"match_all": {}}, "size": 1}
-            test_result = client.search(body=test_query, index=args.index)
-            print(f"Simple query successful, found {test_result['hits']['total']['value']} documents")
-            if test_result['hits']['total']['value'] > 0:
-                print("Sample document fields:", list(test_result['hits']['hits'][0]['_source'].keys()))
-                if 'content_vector' in test_result['hits']['hits'][0]['_source']:
-                    vector_dim = len(test_result['hits']['hits'][0]['_source']['content_vector'])
-                    print(f"Vector dimension in index: {vector_dim}")
-                    if vector_dim != args.dimension:
-                        print(f"Warning: Specified dimension ({args.dimension}) doesn't match index dimension ({vector_dim})")
-                        print(f"Updating dimension to {vector_dim}")
-                        args.dimension = vector_dim
-        except Exception as e:
-            print(f"Error with simple test query: {e}")
-            return
         
         # Create and run benchmark
-        print("Creating benchmark object...")
         benchmark = QueryBenchmark(client, args.index, args.dimension, args.k)
-        print("Starting benchmark run...")
         results = benchmark.run_benchmark(args.concurrency, args.duration)
         
         # Print results
         print("\n\n" + "="*50)
-        print("BENCHMARK RESULTS (FINAL)")
+        print("BENCHMARK RESULTS")
         print("="*50)
         print(f"Total queries: {results['queries']}")
         print(f"Duration: {results['duration_seconds']:.2f} seconds")
@@ -402,17 +322,8 @@ def main():
         print(f"  Max: {results['latency']['max']:.2f} ms")
         print("="*50)
         
-        # Force flush stdout to ensure all output is displayed
-        sys.stdout.flush()
-        
     except Exception as e:
         print(f"Error: {e}")
-        import traceback
-        print(f"Traceback: {traceback.format_exc()}")
-        
-    finally:
-        print("Benchmark script completed.")
-        sys.stdout.flush()
 
 if __name__ == "__main__":
     main()

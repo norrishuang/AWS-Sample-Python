@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-OpenSearch Sparse Vector Query Benchmark
+OpenSearch Neural Sparse Vector Query Benchmark
 
-This script performs concurrent sparse vector search queries against OpenSearch
+This script performs concurrent neural sparse vector search queries against OpenSearch
 using process-based parallelism and collects performance metrics including QPS and latency percentiles.
 """
 
@@ -64,10 +64,10 @@ def get_sparse_vector_terms(client, index_name, sample_size=100):
         mapping = client.indices.get_mapping(index=index_name)
         index_mappings = list(mapping.values())[0]
         
-        # Check if content_sparse_vector exists and is a rank_features field
+        # Check if content_sparse_vector exists
         properties = index_mappings.get('mappings', {}).get('properties', {})
-        if 'content_sparse_vector' not in properties or properties['content_sparse_vector'].get('type') != 'rank_features':
-            print("Warning: content_sparse_vector field not found or not a rank_features type")
+        if 'content_sparse_vector' not in properties:
+            print("Warning: content_sparse_vector field not found in index mapping")
             # Generate fallback terms
             return ['term' + str(i) for i in range(1, 101)]
         
@@ -102,9 +102,9 @@ def get_sparse_vector_terms(client, index_name, sample_size=100):
         # If we can't get real terms, generate some random ones
         return ['term' + str(i) for i in range(1, 101)]
 
-def generate_random_sparse_query(terms, min_terms=DEFAULT_MIN_TERMS, max_terms=DEFAULT_MAX_TERMS):
+def generate_random_neural_sparse_query(terms, min_terms=DEFAULT_MIN_TERMS, max_terms=DEFAULT_MAX_TERMS):
     """
-    Generate a random sparse vector query using the provided terms.
+    Generate a random neural sparse vector query using the provided terms.
     
     Args:
         terms: List of available terms to choose from
@@ -112,7 +112,7 @@ def generate_random_sparse_query(terms, min_terms=DEFAULT_MIN_TERMS, max_terms=D
         max_terms: Maximum number of terms to include in the query
         
     Returns:
-        dict: A query body for OpenSearch
+        dict: A query body for OpenSearch using neural_sparse query
     """
     if not terms:
         # If no terms are available, use a simple match_all query
@@ -133,62 +133,21 @@ def generate_random_sparse_query(terms, min_terms=DEFAULT_MIN_TERMS, max_terms=D
     # Select random terms
     selected_terms = random.sample(terms, num_terms)
     
-    # Build the query
-    should_clauses = []
+    # Create query_tokens dictionary with random weights
+    query_tokens = {}
     for term in selected_terms:
-        # Use different rank_feature functions randomly
-        function_type = random.choice(['saturation', 'log', 'sigmoid'])
-        
-        try:
-            if function_type == 'saturation':
-                clause = {
-                    "rank_feature": {
-                        f"content_sparse_vector.{term}": {
-                            "saturation": {}
-                        }
-                    }
-                }
-            elif function_type == 'log':
-                clause = {
-                    "rank_feature": {
-                        f"content_sparse_vector.{term}": {
-                            "log": {
-                                "scaling_factor": random.uniform(0.1, 3.0)
-                            }
-                        }
-                    }
-                }
-            else:  # sigmoid
-                clause = {
-                    "rank_feature": {
-                        f"content_sparse_vector.{term}": {
-                            "sigmoid": {
-                                "pivot": random.uniform(0.5, 2.0),
-                                "exponent": random.uniform(0.5, 2.0)
-                            }
-                        }
-                    }
-                }
-            
-            should_clauses.append(clause)
-        except Exception as e:
-            print(f"Error creating clause for term '{term}': {e}")
+        # Generate a random weight between 1.0 and 5.0
+        weight = round(random.uniform(1.0, 5.0), 7)
+        query_tokens[term] = weight
     
-    # If we couldn't create any valid clauses, use a match_all query
-    if not should_clauses:
-        return {
-            "size": DEFAULT_K,
-            "query": {
-                "match_all": {}
-            }
-        }
-    
-    # Create the final query
+    # Create the neural_sparse query
     query = {
         "size": DEFAULT_K,
         "query": {
-            "bool": {
-                "should": should_clauses
+            "neural_sparse": {
+                "content_sparse_vector": {
+                    "query_tokens": query_tokens
+                }
             }
         }
     }
@@ -196,7 +155,7 @@ def generate_random_sparse_query(terms, min_terms=DEFAULT_MIN_TERMS, max_terms=D
     return query
 
 def worker_process(args):
-    """Worker function to execute sparse vector queries until stop flag is set."""
+    """Worker function to execute neural sparse vector queries until stop flag is set."""
     host, port, user, password, index_name, terms, min_terms, max_terms, k, worker_id, stop_flag, result_queue = args
     
     # Create client for this process
@@ -207,8 +166,8 @@ def worker_process(args):
         query_id += 1
         
         try:
-            # Generate random sparse vector query
-            query = generate_random_sparse_query(terms, min_terms, max_terms)
+            # Generate random neural sparse vector query
+            query = generate_random_neural_sparse_query(terms, min_terms, max_terms)
             query["size"] = k  # Set the number of results to return
             
             start_time = time.time()
@@ -228,7 +187,7 @@ def worker_process(args):
 
 def run_benchmark(host, port, user, password, index_name, terms, min_terms, max_terms, k, concurrency, duration_seconds):
     """Run the benchmark with specified parameters."""
-    print(f"Starting sparse vector benchmark with {concurrency} concurrent processes for {duration_seconds} seconds...")
+    print(f"Starting neural sparse vector benchmark with {concurrency} concurrent processes for {duration_seconds} seconds...")
     
     if not terms:
         print("Warning: No valid terms found. Using fallback query strategy.")
@@ -331,7 +290,7 @@ def run_benchmark(host, port, user, password, index_name, terms, min_terms, max_
 
 def main():
     """Main function to parse arguments and execute the benchmark."""
-    parser = argparse.ArgumentParser(description='Benchmark OpenSearch sparse vector search performance')
+    parser = argparse.ArgumentParser(description='Benchmark OpenSearch neural sparse vector search performance')
     parser.add_argument('--host', type=str, default=OPENSEARCH_HOST,
                         help='OpenSearch host')
     parser.add_argument('--port', type=int, default=OPENSEARCH_PORT,
@@ -429,11 +388,11 @@ def main():
         
         if not terms:
             print("Warning: Could not find any sparse vector terms in the index.")
-            print("Will use match_all queries instead of rank_feature queries.")
+            print("Will use match_all queries instead of neural_sparse queries.")
         
         # Debug: Show a sample query if debug mode is enabled
         if args.debug and terms:
-            sample_query = generate_random_sparse_query(
+            sample_query = generate_random_neural_sparse_query(
                 terms, 
                 min(args.min_terms, len(terms)), 
                 min(args.max_terms, len(terms))
@@ -461,7 +420,7 @@ def main():
         if results:
             # Print results
             print("\n\n" + "="*50)
-            print("SPARSE VECTOR BENCHMARK RESULTS")
+            print("NEURAL SPARSE VECTOR BENCHMARK RESULTS")
             print("="*50)
             print(f"Total queries: {results['queries']}")
             print(f"Duration: {results['duration_seconds']:.2f} seconds")

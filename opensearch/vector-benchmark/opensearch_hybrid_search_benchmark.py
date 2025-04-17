@@ -196,7 +196,7 @@ def worker_process(args):
             # Generate random hybrid query
             query = generate_random_hybrid_query(terms, vector_dimension, k, min_terms, max_terms)
             
-            # Set search parameters including pipeline
+            # Set search parameters
             search_params = {
                 "body": query,
                 "index": index_name
@@ -204,7 +204,8 @@ def worker_process(args):
             
             # Add pipeline if specified
             if pipeline_name:
-                search_params["pipeline"] = pipeline_name
+                # For search pipelines, we need to use the search_pipeline parameter
+                search_params["search_pipeline"] = pipeline_name
             
             start_time = time.time()
             response = client.search(**search_params)
@@ -227,6 +228,8 @@ def run_benchmark(host, port, user, password, index_name, terms, vector_dimensio
     
     if pipeline_name:
         print(f"Using search pipeline: {pipeline_name}")
+    else:
+        print("No search pipeline will be used")
     
     if not terms:
         print("Warning: No valid terms found. Using fallback query strategy.")
@@ -425,17 +428,14 @@ def main():
             print("Please create the index first using opensearch_vector_benchmark.py")
             return
         
-        # Check if pipeline exists if specified
+        # Set pipeline name from args
         pipeline_name = args.pipeline
         if pipeline_name:
-            try:
-                # Try to get the pipeline to verify it exists
-                client.ingest.get_pipeline(id=pipeline_name)
-                print(f"Search pipeline '{pipeline_name}' found.")
-            except Exception as e:
-                print(f"Warning: Search pipeline '{pipeline_name}' not found or not accessible: {e}")
-                print("Will proceed without using a pipeline.")
-                pipeline_name = None
+            print(f"Will use search pipeline: '{pipeline_name}'")
+            # Note: We don't verify if the pipeline exists because OpenSearch might use
+            # different APIs for search pipelines vs ingest pipelines
+        else:
+            print("No search pipeline will be used.")
         
         # Get sparse vector terms from the index
         print(f"Sampling documents to extract sparse vector terms...")

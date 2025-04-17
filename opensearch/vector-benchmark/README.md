@@ -220,3 +220,101 @@ python opensearch_sparse_vector_query_benchmark.py --concurrency 20 --duration 1
 模拟真实的查询场景。
 
 这个脚本将帮助你评估 OpenSearch 稀疏向量搜索的性能，并提供详细的延迟指标，以便你可以优化你的稀疏向量搜索应用程序。
+
+
+# 并发查询测试脚本(Hybrid Search)
+[opensearch_hybrid_search_benchmark.py](opensearch_hybrid_search_benchmark.py)
+
+## 脚本功能特点
+
+1. 混合查询生成：
+   • 结合了 neural_sparse 和 knn 查询
+   • 从索引中采样文档，提取真实的稀疏向量词条
+   • 随机生成向量用于 knn 查询
+   • 支持配置每个查询中的词条数量
+
+2. 搜索管道支持：
+   • 默认使用 nlp-search-pipeline 搜索管道
+   • 可以通过命令行参数自定义或禁用搜索管道
+
+3. 多进程并发测试：
+   • 使用 Python 的 multiprocessing 模块实现真正的并行查询
+   • 可配置并发进程数量
+
+4. 性能指标收集：
+   • QPS (每秒查询数)
+   • 查询延迟统计 (最小、最大、平均、P50、P90、P95、P99)
+   • 实时进度显示
+
+## 使用方法
+
+bash
+# 基本用法
+python opensearch_hybrid_search_benchmark.py --host localhost --port 9200 --user admin --password admin
+
+# 连接到 Amazon OpenSearch Service (使用基本认证)
+python opensearch_hybrid_search_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --user username --password password
+
+# 连接到 Amazon OpenSearch Service (使用 AWS IAM 认证)
+python opensearch_hybrid_search_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --aws-auth --region your-region
+
+# 自定义测试参数
+python opensearch_hybrid_search_benchmark.py --concurrency 20 --duration 120 --min-terms 5 --max-terms 10 --pipeline nlp-search-pipeline
+
+# 不使用搜索管道
+python opensearch_hybrid_search_benchmark.py --pipeline ""
+
+
+## 参数说明
+
+* --host: OpenSearch 主机地址（默认：localhost）
+* --port: OpenSearch 端口（默认：9200）
+* --user: OpenSearch 用户名（默认：admin）
+* --password: OpenSearch 密码（默认：admin）
+* --index: OpenSearch 索引名称（默认：vector_benchmark）
+* --aws-auth: 使用 AWS IAM 认证
+* --region: AWS 区域（使用 AWS IAM 认证时必需）
+* --dimension: 向量维度（默认：1536）
+* --concurrency: 并发查询进程数（默认：4）
+* --duration: 测试持续时间（秒，默认：60）
+* --k: 检索的结果数量（默认：10）
+* --min-terms: 每个查询中的最小词条数（默认：3）
+* --max-terms: 每个查询中的最大词条数（默认：8）
+* --sample-size: 用于提取词条的文档采样数量（默认：100）
+* --pipeline: 搜索管道名称（默认：nlp-search-pipeline）。使用空字符串禁用管道。
+* --debug: 启用调试模式，显示更多详细信息
+
+## 查询示例
+
+脚本生成的混合查询格式如下：
+
+```json
+{
+   "size": 10,
+   "query": {
+      "hybrid": {
+      "queries": [
+         {
+               "neural_sparse": {
+               "content_sparse_vector": {
+                  "query_tokens": {
+                     "term1": 3.1415927,
+                     "term2": 2.7182818,
+                     "term3": 1.4142135
+                  }
+               }
+            }
+         },
+         {
+            "knn": {
+               "content_vector": {
+                  "vector": [0.15, 0.25, ..., 0.45],
+                  "k": 10
+               }
+            }
+         }
+      ]
+      }
+   }
+}
+```

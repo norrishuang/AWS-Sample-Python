@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-OpenSearch Sparse Vector Query Benchmark
+OpenSearch Hybrid Search Benchmark
 
-This script performs concurrent sparse vector search queries against OpenSearch
+This script performs concurrent hybrid search queries (combining neural_sparse and knn) against OpenSearch
 using process-based parallelism and collects performance metrics including QPS and latency percentiles.
 """
 
@@ -28,11 +28,13 @@ USE_SSL = True  # Amazon OpenSearch Service requires HTTPS
 
 # Default index settings
 INDEX_NAME = 'vector_benchmark'
+VECTOR_DIMENSION = 1536
 DEFAULT_CONCURRENCY = 4  # Default to 4 processes
 DEFAULT_DURATION = 60  # seconds
 DEFAULT_K = 10  # Number of nearest neighbors to retrieve
 DEFAULT_MIN_TERMS = 3  # Minimum number of terms to include in each query
 DEFAULT_MAX_TERMS = 8  # Maximum number of terms to include in each query
+DEFAULT_PIPELINE = "nlp-search-pipeline"  # Default search pipeline name
 
 def create_opensearch_client(host, port, username, password):
     """Create and return an OpenSearch client."""
@@ -64,10 +66,10 @@ def get_sparse_vector_terms(client, index_name, sample_size=100):
         mapping = client.indices.get_mapping(index=index_name)
         index_mappings = list(mapping.values())[0]
         
-        # Check if content_sparse_vector exists and is a rank_features field
+        # Check if content_sparse_vector exists
         properties = index_mappings.get('mappings', {}).get('properties', {})
-        if 'content_sparse_vector' not in properties or properties['content_sparse_vector'].get('type') != 'rank_features':
-            print("Warning: content_sparse_vector field not found or not a rank_features type")
+        if 'content_sparse_vector' not in properties:
+            print("Warning: content_sparse_vector field not found in index mapping")
             # Generate fallback terms
             return ['term' + str(i) for i in range(1, 101)]
         
@@ -102,24 +104,35 @@ def get_sparse_vector_terms(client, index_name, sample_size=100):
         # If we can't get real terms, generate some random ones
         return ['term' + str(i) for i in range(1, 101)]
 
-def generate_random_sparse_query(terms, min_terms=DEFAULT_MIN_TERMS, max_terms=DEFAULT_MAX_TERMS):
+def generate_random_hybrid_query(terms, vector_dimension, k, min_terms=DEFAULT_MIN_TERMS, max_terms=DEFAULT_MAX_TERMS):
     """
-    Generate a random sparse vector query using the provided terms.
+    Generate a random hybrid query combining neural_sparse and knn.
     
     Args:
-        terms: List of available terms to choose from
+        terms: List of available terms to choose from for neural_sparse
+        vector_dimension: Dimension of the vector for knn
+        k: Number of nearest neighbors to retrieve
         min_terms: Minimum number of terms to include in the query
         max_terms: Maximum number of terms to include in the query
         
     Returns:
-        dict: A query body for OpenSearch
+        dict: A query body for OpenSearch using hybrid search
     """
+    # Generate random vector for knn part
+    vector = np.random.uniform(-1, 1, vector_dimension).tolist()
+    
+    # Generate neural_sparse part
     if not terms:
-        # If no terms are available, use a simple match_all query
+        # If no terms are available, use a simple knn query
         return {
-            "size": DEFAULT_K,
+            "size": k,
             "query": {
-                "match_all": {}
+                "knn": {
+                    "content_vector": {
+                        "vector": vector,
+                        "k": k
+                    }
+                }
             }
         }
     
@@ -133,62 +146,35 @@ def generate_random_sparse_query(terms, min_terms=DEFAULT_MIN_TERMS, max_terms=D
     # Select random terms
     selected_terms = random.sample(terms, num_terms)
     
-    # Build the query
-    should_clauses = []
+    # Create query_tokens dictionary with random weights
+    query_tokens = {}
     for term in selected_terms:
-        # Use different rank_feature functions randomly
-        function_type = random.choice(['saturation', 'log', 'sigmoid'])
-        
-        try:
-            if function_type == 'saturation':
-                clause = {
-                    "rank_feature": {
-                        f"content_sparse_vector.{term}": {
-                            "saturation": {}
-                        }
-                    }
-                }
-            elif function_type == 'log':
-                clause = {
-                    "rank_feature": {
-                        f"content_sparse_vector.{term}": {
-                            "log": {
-                                "scaling_factor": random.uniform(0.1, 3.0)
-                            }
-                        }
-                    }
-                }
-            else:  # sigmoid
-                clause = {
-                    "rank_feature": {
-                        f"content_sparse_vector.{term}": {
-                            "sigmoid": {
-                                "pivot": random.uniform(0.5, 2.0),
-                                "exponent": random.uniform(0.5, 2.0)
-                            }
-                        }
-                    }
-                }
-            
-            should_clauses.append(clause)
-        except Exception as e:
-            print(f"Error creating clause for term '{term}': {e}")
+        # Generate a random weight between 1.0 and 5.0
+        weight = round(random.uniform(1.0, 5.0), 7)
+        query_tokens[term] = weight
     
-    # If we couldn't create any valid clauses, use a match_all query
-    if not should_clauses:
-        return {
-            "size": DEFAULT_K,
-            "query": {
-                "match_all": {}
-            }
-        }
-    
-    # Create the final query
+    # Create the hybrid query
     query = {
-        "size": DEFAULT_K,
+        "size": k,
         "query": {
-            "bool": {
-                "should": should_clauses
+            "hybrid": {
+                "queries": [
+                    {
+                        "neural_sparse": {
+                            "content_sparse_vector": {
+                                "query_tokens": query_tokens
+                            }
+                        }
+                    },
+                    {
+                        "knn": {
+                            "content_vector": {
+                                "vector": vector,
+                                "k": k
+                            }
+                        }
+                    }
+                ]
             }
         }
     }
@@ -196,8 +182,8 @@ def generate_random_sparse_query(terms, min_terms=DEFAULT_MIN_TERMS, max_terms=D
     return query
 
 def worker_process(args):
-    """Worker function to execute sparse vector queries until stop flag is set."""
-    host, port, user, password, index_name, terms, min_terms, max_terms, k, worker_id, stop_flag, result_queue = args
+    """Worker function to execute hybrid search queries until stop flag is set."""
+    host, port, user, password, index_name, terms, vector_dimension, min_terms, max_terms, k, pipeline_name, worker_id, stop_flag, result_queue = args
     
     # Create client for this process
     client = create_opensearch_client(host, port, user, password)
@@ -207,12 +193,21 @@ def worker_process(args):
         query_id += 1
         
         try:
-            # Generate random sparse vector query
-            query = generate_random_sparse_query(terms, min_terms, max_terms)
-            query["size"] = k  # Set the number of results to return
+            # Generate random hybrid query
+            query = generate_random_hybrid_query(terms, vector_dimension, k, min_terms, max_terms)
+            
+            # Set search parameters including pipeline
+            search_params = {
+                "body": query,
+                "index": index_name
+            }
+            
+            # Add pipeline if specified
+            if pipeline_name:
+                search_params["pipeline"] = pipeline_name
             
             start_time = time.time()
-            response = client.search(body=query, index=index_name)
+            response = client.search(**search_params)
             end_time = time.time()
             
             # Extract the took field (in milliseconds)
@@ -226,9 +221,12 @@ def worker_process(args):
             # Sleep briefly to avoid flooding with errors
             time.sleep(0.1)
 
-def run_benchmark(host, port, user, password, index_name, terms, min_terms, max_terms, k, concurrency, duration_seconds):
+def run_benchmark(host, port, user, password, index_name, terms, vector_dimension, min_terms, max_terms, k, pipeline_name, concurrency, duration_seconds):
     """Run the benchmark with specified parameters."""
-    print(f"Starting sparse vector benchmark with {concurrency} concurrent processes for {duration_seconds} seconds...")
+    print(f"Starting hybrid search benchmark with {concurrency} concurrent processes for {duration_seconds} seconds...")
+    
+    if pipeline_name:
+        print(f"Using search pipeline: {pipeline_name}")
     
     if not terms:
         print("Warning: No valid terms found. Using fallback query strategy.")
@@ -245,7 +243,7 @@ def run_benchmark(host, port, user, password, index_name, terms, min_terms, max_
     start_time = time.time()
     
     for i in range(concurrency):
-        args = (host, port, user, password, index_name, terms, min_terms, max_terms, k, i, stop_flag, result_queue)
+        args = (host, port, user, password, index_name, terms, vector_dimension, min_terms, max_terms, k, pipeline_name, i, stop_flag, result_queue)
         p = multiprocessing.Process(target=worker_process, args=(args,))
         p.daemon = True  # Set as daemon so they will terminate when main process exits
         p.start()
@@ -331,7 +329,7 @@ def run_benchmark(host, port, user, password, index_name, terms, min_terms, max_
 
 def main():
     """Main function to parse arguments and execute the benchmark."""
-    parser = argparse.ArgumentParser(description='Benchmark OpenSearch sparse vector search performance')
+    parser = argparse.ArgumentParser(description='Benchmark OpenSearch hybrid search performance')
     parser.add_argument('--host', type=str, default=OPENSEARCH_HOST,
                         help='OpenSearch host')
     parser.add_argument('--port', type=int, default=OPENSEARCH_PORT,
@@ -346,6 +344,8 @@ def main():
                         help='Use AWS IAM authentication instead of basic auth')
     parser.add_argument('--region', type=str, default='us-east-1',
                         help='AWS region for OpenSearch service (required for AWS auth)')
+    parser.add_argument('--dimension', type=int, default=VECTOR_DIMENSION,
+                        help=f'Vector dimension (default: {VECTOR_DIMENSION})')
     parser.add_argument('--concurrency', type=int, default=DEFAULT_CONCURRENCY,
                         help=f'Number of concurrent processes (default: {DEFAULT_CONCURRENCY})')
     parser.add_argument('--duration', type=int, default=DEFAULT_DURATION,
@@ -358,6 +358,8 @@ def main():
                         help=f'Maximum number of terms in each query (default: {DEFAULT_MAX_TERMS})')
     parser.add_argument('--sample-size', type=int, default=100,
                         help='Number of documents to sample for term extraction (default: 100)')
+    parser.add_argument('--pipeline', type=str, default=DEFAULT_PIPELINE,
+                        help=f'Search pipeline name (default: {DEFAULT_PIPELINE}). Use empty string to disable.')
     parser.add_argument('--debug', action='store_true',
                         help='Enable debug mode with more verbose output')
     
@@ -423,20 +425,30 @@ def main():
             print("Please create the index first using opensearch_vector_benchmark.py")
             return
         
+        # Check if pipeline exists if specified
+        pipeline_name = args.pipeline
+        if pipeline_name:
+            try:
+                # Try to get the pipeline to verify it exists
+                client.ingest.get_pipeline(id=pipeline_name)
+                print(f"Search pipeline '{pipeline_name}' found.")
+            except Exception as e:
+                print(f"Warning: Search pipeline '{pipeline_name}' not found or not accessible: {e}")
+                print("Will proceed without using a pipeline.")
+                pipeline_name = None
+        
         # Get sparse vector terms from the index
         print(f"Sampling documents to extract sparse vector terms...")
         terms = get_sparse_vector_terms(client, args.index, args.sample_size)
         
-        if not terms:
-            print("Warning: Could not find any sparse vector terms in the index.")
-            print("Will use match_all queries instead of rank_feature queries.")
-        
         # Debug: Show a sample query if debug mode is enabled
-        if args.debug and terms:
-            sample_query = generate_random_sparse_query(
+        if args.debug:
+            sample_query = generate_random_hybrid_query(
                 terms, 
-                min(args.min_terms, len(terms)), 
-                min(args.max_terms, len(terms))
+                args.dimension,
+                args.k,
+                min(args.min_terms, len(terms) if terms else 0), 
+                min(args.max_terms, len(terms) if terms else 0)
             )
             print("\nSample query that will be used:")
             import json
@@ -451,9 +463,11 @@ def main():
             password=args.password,
             index_name=args.index,
             terms=terms,
+            vector_dimension=args.dimension,
             min_terms=args.min_terms,
             max_terms=args.max_terms,
             k=args.k,
+            pipeline_name=pipeline_name,
             concurrency=args.concurrency,
             duration_seconds=args.duration
         )
@@ -461,7 +475,7 @@ def main():
         if results:
             # Print results
             print("\n\n" + "="*50)
-            print("SPARSE VECTOR BENCHMARK RESULTS")
+            print("HYBRID SEARCH BENCHMARK RESULTS")
             print("="*50)
             print(f"Total queries: {results['queries']}")
             print(f"Duration: {results['duration_seconds']:.2f} seconds")

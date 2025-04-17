@@ -205,11 +205,36 @@ class QueryBenchmark:
                 self.running = False
                 self.end_time = time.time()
                 print(f"Benchmark end time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                print("Waiting for all worker threads to complete...")
+                # Wait for all futures to complete
+                for future in futures:
+                    try:
+                        future.result(timeout=5)  # Wait up to 5 seconds for each future
+                    except Exception as e:
+                        print(f"Worker thread error: {e}")
         
         # Calculate final results
         actual_duration = self.end_time - self.start_time
         qps = self.query_count / actual_duration if actual_duration > 0 else 0
         print(f"Benchmark completed. Total queries: {self.query_count}, Duration: {actual_duration:.2f}s, QPS: {qps:.2f}")
+        
+        # Print detailed results immediately
+        stats = self.latency_tracker.get_stats()
+        print("\n" + "="*50)
+        print("BENCHMARK RESULTS (PRELIMINARY)")
+        print("="*50)
+        print(f"Total queries: {self.query_count}")
+        print(f"Duration: {actual_duration:.2f} seconds")
+        print(f"QPS (queries per second): {qps:.2f}")
+        print("\nLatency Statistics (milliseconds):")
+        print(f"  Min: {stats['min']:.2f} ms")
+        print(f"  Mean: {stats['mean']:.2f} ms")
+        print(f"  P50: {stats['p50']:.2f} ms")
+        print(f"  P90: {stats['p90']:.2f} ms")
+        print(f"  P95: {stats['p95']:.2f} ms")
+        print(f"  P99: {stats['p99']:.2f} ms")
+        print(f"  Max: {stats['max']:.2f} ms")
+        print("="*50)
         
         return {
             "queries": self.query_count,
@@ -362,7 +387,7 @@ def main():
         
         # Print results
         print("\n\n" + "="*50)
-        print("BENCHMARK RESULTS")
+        print("BENCHMARK RESULTS (FINAL)")
         print("="*50)
         print(f"Total queries: {results['queries']}")
         print(f"Duration: {results['duration_seconds']:.2f} seconds")
@@ -377,10 +402,17 @@ def main():
         print(f"  Max: {results['latency']['max']:.2f} ms")
         print("="*50)
         
+        # Force flush stdout to ensure all output is displayed
+        sys.stdout.flush()
+        
     except Exception as e:
         print(f"Error: {e}")
         import traceback
         print(f"Traceback: {traceback.format_exc()}")
+        
+    finally:
+        print("Benchmark script completed.")
+        sys.stdout.flush()
 
 if __name__ == "__main__":
     main()

@@ -134,7 +134,7 @@ class QueryBenchmark:
             took_ms = response.get('took', 0)
             
             # Update metrics
-            self.latency_tracker.add_latency(took_ms)
+            self.latency_trcker.add_latency(took_ms)
             with self.query_count_lock:
                 self.query_count += 1
             

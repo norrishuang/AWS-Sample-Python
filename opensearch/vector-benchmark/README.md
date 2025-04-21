@@ -2,6 +2,7 @@
 
 这个项目用于生成随机模拟数据并将其导入到OpenSearch中，以便进行向量搜索基准测试。
 
+# 1. 导入数据
 ## 数据结构
 
 生成的数据包含以下字段：
@@ -42,11 +43,8 @@ python opensearch_vector_benchmark.py --num_docs 10000 --host your-domain.region
 
 # 使用AWS IAM认证
 python opensearch_vector_benchmark.py --num_docs 10000 --host your-domain.region.es.amazonaws.com --port 443 --aws-auth --region your-region --index vector_benchmark
-```
 
 ### 连接到自托管OpenSearch
-
-```bash
 python opensearch_vector_benchmark.py --num_docs 10000 --host localhost --port 9200 --user admin --password admin --index vector_benchmark
 ```
 
@@ -74,7 +72,7 @@ python opensearch_vector_benchmark.py --num_docs 10000 --host localhost --port 9
 - 生产环境中应启用SSL并使用适当的证书
 
 
-# 并发查询测试脚本(Dense Vector)
+# 2. 并发查询测试脚本(Dense Vector)
 
 ## 脚本功能
 
@@ -114,20 +112,14 @@ python opensearch_vector_query_benchmark.py [options]
 
 ### 连接到Amazon OpenSearch Service示例
 
-bash
+```bash
 # 使用基本认证
-```shell
 python opensearch_vector_query_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --user username --password password --concurrency 20 --duration 120
-```
 
 # 使用AWS IAM认证
-```shell
 python opensearch_vector_query_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --aws-auth --region your-region --concurrency 20 --duration 120
-```
 
 ### 连接到自托管OpenSearch示例
-
-```shell
 python opensearch_vector_query_benchmark.py --host localhost --port 9200 --user admin --password admin --dimension 1536 --concurrency 20 --duration 60
 ```
 
@@ -157,7 +149,7 @@ python opensearch_vector_query_benchmark.py --host localhost --port 9200 --user 
 这个脚本将帮助您评估OpenSearch向量搜索的性能，并提供详细的延迟指标，以便您可以优化您的向量搜索应用程序。
 
 
-# 并发查询测试脚本(Sparse Vector)
+# 3. 并发查询测试脚本(Sparse Vector)
 
 ## 脚本功能特点
 
@@ -181,15 +173,12 @@ bash
 # 基本用法
 ```shell
 python opensearch_sparse_vector_query_benchmark.py --host localhost --port 9200 --user admin --password admin
-```
 
 # 连接到 Amazon OpenSearch Service (使用基本认证)
-```shell
 python opensearch_sparse_vector_query_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --user username --password password
-```
 
 # 连接到 Amazon OpenSearch Service (使用 AWS IAM 认证)
-```shell
+
 python opensearch_sparse_vector_query_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --aws-auth --region your-region
 ```
 
@@ -222,7 +211,7 @@ python opensearch_sparse_vector_query_benchmark.py --concurrency 20 --duration 1
 这个脚本将帮助你评估 OpenSearch 稀疏向量搜索的性能，并提供详细的延迟指标，以便你可以优化你的稀疏向量搜索应用程序。
 
 
-# 并发查询测试脚本(Hybrid Search)
+# 4. 并发查询测试脚本(Hybrid Search)
 [opensearch_hybrid_search_benchmark.py](opensearch_hybrid_search_benchmark.py)
 
 ## 脚本功能特点
@@ -248,7 +237,7 @@ python opensearch_sparse_vector_query_benchmark.py --concurrency 20 --duration 1
 
 ## 使用方法
 
-bash
+```bash
 # 基本用法
 python opensearch_hybrid_search_benchmark.py --host localhost --port 9200 --user admin --password admin
 
@@ -263,7 +252,7 @@ python opensearch_hybrid_search_benchmark.py --concurrency 20 --duration 120 --m
 
 # 不使用搜索管道
 python opensearch_hybrid_search_benchmark.py --pipeline ""
-
+```
 
 ## 参数说明
 
@@ -318,3 +307,81 @@ python opensearch_hybrid_search_benchmark.py --pipeline ""
    }
 }
 ```
+
+
+## OpenSearch Filtered Vector Query Benchmark Script
+
+Using OpenSearch's script_score filter functionality. It specifically:
+
+1. Uses script_score with prefiltering: Implements the script_score query with a term filter on the platform
+field before performing vector similarity search
+1. Randomly selects platforms: For each query, randomly selects one of the platforms ("web", "mobile", 
+"desktop", "api", "iot", "cloud") to filter on
+1. Collects platform-specific metrics: Tracks and reports performance metrics for each platform separately
+2. Maintains the same concurrency model: Uses multiprocessing for true parallel query execution
+
+### Key Features
+
+• **Script_score filter implementation**: Uses the OpenSearch script_score query with a bool filter to 
+prefilter results by platform before vector search
+• **Platform-specific statistics**: Collects and reports latency metrics per platform to identify any 
+performance differences
+• **Comprehensive performance metrics**: Reports QPS, min/max/mean latency, and percentiles (P50, P90, P95,
+P99)
+• **Real-time progress display**: Shows current QPS and latency during the test
+
+### Example Query
+
+The script generates queries like this:
+
+```json
+{
+  "size": 10,
+  "query": {
+    "script_score": {
+      "query": {
+        "bool": {
+          "filter": {
+            "term": {
+              "platform": "mobile"  // Randomly selected platform
+            }
+          }
+        }
+      },
+      "script": {
+        "lang": "knn",
+        "source": "knn_score",
+        "params": {
+          "field": "content_vector",
+          "query_value": [0.1, 0.2, ...],  // Random vector
+          "space_type": "innerproduct"
+        }
+      }
+    }
+  }
+}
+```
+
+### Usage
+
+You can run the script with the following command:
+
+```bash
+python opensearch_filtered_vector_query_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --user username --password password --concurrency 20 --duration 60
+```
+
+For AWS IAM authentication:
+
+```bash
+python opensearch_filtered_vector_query_benchmark.py --host your-domain.region.es.amazonaws.com --port 443 --aws-auth --region your-region --concurrency 20 --duration 60
+```
+
+### Output
+
+The script will output detailed performance metrics including:
+• Overall QPS and latency statistics
+• Platform-specific metrics showing how performance varies across different platform filters
+• Real-time progress updates during the test
+
+This benchmark will help you understand how prefiltering affects vector search performance in OpenSearch 
+and identify any performance differences between different filter values.

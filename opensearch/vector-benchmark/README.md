@@ -306,7 +306,7 @@ python opensearch_hybrid_search_benchmark.py --pipeline ""
 ```
 
 
-## OpenSearch Filtered Vector Query Benchmark Script
+# 5. OpenSearch Filtered Vector Query Benchmark Script
 
 Using OpenSearch's script_score filter functionality. It specifically:
 

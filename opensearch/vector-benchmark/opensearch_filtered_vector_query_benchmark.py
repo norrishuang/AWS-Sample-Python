@@ -3,8 +3,8 @@
 OpenSearch Filtered Vector Query Benchmark
 
 This script performs concurrent vector search queries against OpenSearch
-using script_score with prefiltering on the platform field and collects 
-performance metrics including QPS and latency percentiles.
+using script_score with prefiltering on the platform field and date field,
+and collects performance metrics including QPS and latency percentiles.
 """
 
 import argparse
@@ -18,6 +18,7 @@ from opensearchpy import OpenSearch, RequestsHttpConnection
 import sys
 import os
 import random
+from datetime import datetime, timedelta
 
 # Default OpenSearch connection settings
 OPENSEARCH_HOST = 'localhost'
@@ -35,6 +36,26 @@ DEFAULT_K = 10  # Number of nearest neighbors to retrieve
 
 # Available platforms for filtering (from opensearch_vector_benchmark.py)
 PLATFORMS = ["web", "mobile", "desktop", "api", "iot", "cloud"]
+
+# Generate a list of dates from 2020-01-01 to current date
+def generate_date_list():
+    """Generate a list of ISO formatted dates from 2020-01-01 to current date."""
+    start_date = datetime(2020, 1, 1).date()
+    end_date = datetime.now().date()
+    
+    # Calculate number of days between start and end
+    days_between = (end_date - start_date).days
+    
+    # Generate all dates (this could be a large list)
+    all_dates = [(start_date + timedelta(days=i)).isoformat() for i in range(days_between + 1)]
+    
+    # To avoid memory issues, randomly sample 100 dates from this range
+    if len(all_dates) > 100:
+        return random.sample(all_dates, 100)
+    return all_dates
+
+# List of dates to use for filtering
+DATE_LIST = generate_date_list()
 
 def create_opensearch_client(host, port, username, password):
     """Create and return an OpenSearch client."""
@@ -66,18 +87,28 @@ def worker_process(args):
         # Randomly select a platform to filter on
         platform = random.choice(PLATFORMS)
         
-        # Prepare query with script_score filter
+        # Randomly select a date to filter on
+        filter_date = random.choice(DATE_LIST)
+        
+        # Prepare query with script_score filter for both platform and date
         query = {
             "size": k,
             "query": {
                 "script_score": {
                     "query": {
                         "bool": {
-                            "filter": {
-                                "term": {
-                                    "platform": platform
+                            "filter": [
+                                {
+                                    "term": {
+                                        "platform": platform
+                                    }
+                                },
+                                {
+                                    "term": {
+                                        "date": filter_date
+                                    }
                                 }
-                            }
+                            ]
                         }
                     },
                     "script": {
@@ -105,6 +136,7 @@ def worker_process(args):
             result_queue.put({
                 'took_ms': took_ms,
                 'platform': platform,
+                'date': filter_date,
                 'hits': len(response.get('hits', {}).get('hits', []))
             })
                 
@@ -114,6 +146,7 @@ def worker_process(args):
 def run_benchmark(host, port, user, password, index_name, vector_dimension, k, concurrency, duration_seconds):
     """Run the benchmark with specified parameters."""
     print(f"Starting benchmark with {concurrency} concurrent processes for {duration_seconds} seconds...")
+    print(f"Using date range from 2020-01-01 to present with {len(DATE_LIST)} sample dates")
     
     # Setup multiprocessing manager for shared state
     manager = multiprocessing.Manager()
@@ -134,6 +167,7 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     # Monitor progress
     latencies = []
     platform_stats = {platform: [] for platform in PLATFORMS}
+    date_stats = {date: [] for date in DATE_LIST}
     
     try:
         while time.time() - start_time < duration_seconds:
@@ -142,9 +176,11 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
                 result = result_queue.get_nowait()
                 latency = result['took_ms']
                 platform = result['platform']
+                filter_date = result['date']
                 
                 latencies.append(latency)
                 platform_stats[platform].append(latency)
+                date_stats[filter_date].append(latency)
             
             elapsed = time.time() - start_time
             current_qps = len(latencies) / elapsed if elapsed > 0 else 0
@@ -181,9 +217,11 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
             result = result_queue.get_nowait()
             latency = result['took_ms']
             platform = result['platform']
+            filter_date = result['date']
             
             latencies.append(latency)
             platform_stats[platform].append(latency)
+            date_stats[filter_date].append(latency)
         
         # Terminate any remaining processes
         for p in processes:
@@ -201,6 +239,10 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     
     sorted_latencies = sorted(latencies)
     qps = len(latencies) / actual_duration
+    
+    # Get top 10 dates by query count for reporting
+    top_dates = sorted([(date, len(stats)) for date, stats in date_stats.items() if stats], 
+                      key=lambda x: x[1], reverse=True)[:10]
     
     stats = {
         "queries": len(latencies),
@@ -222,6 +264,14 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
                 "p50": sorted(platform_stats[platform])[len(platform_stats[platform]) // 2] if platform_stats[platform] else 0,
                 "p95": sorted(platform_stats[platform])[int(len(platform_stats[platform]) * 0.95)] if platform_stats[platform] else 0
             } for platform in PLATFORMS if platform_stats[platform]
+        },
+        "date_stats": {
+            date: {
+                "queries": len(date_stats[date]),
+                "mean": statistics.mean(date_stats[date]) if date_stats[date] else 0,
+                "p50": sorted(date_stats[date])[len(date_stats[date]) // 2] if date_stats[date] else 0,
+                "p95": sorted(date_stats[date])[int(len(date_stats[date]) * 0.95)] if date_stats[date] else 0
+            } for date, _ in top_dates
         }
     }
     
@@ -348,6 +398,14 @@ def main():
             print("\nPlatform-specific Statistics:")
             for platform, stats in results['platform_stats'].items():
                 print(f"  {platform}:")
+                print(f"    Queries: {stats['queries']}")
+                print(f"    Mean: {stats['mean']:.2f} ms")
+                print(f"    P50: {stats['p50']:.2f} ms")
+                print(f"    P95: {stats['p95']:.2f} ms")
+            
+            print("\nDate-specific Statistics (Top 10):")
+            for date, stats in results['date_stats'].items():
+                print(f"  {date}:")
                 print(f"    Queries: {stats['queries']}")
                 print(f"    Mean: {stats['mean']:.2f} ms")
                 print(f"    P50: {stats['p50']:.2f} ms")

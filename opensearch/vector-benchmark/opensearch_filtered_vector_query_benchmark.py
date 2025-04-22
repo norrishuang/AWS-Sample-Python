@@ -23,7 +23,8 @@ from datetime import datetime, timedelta
 # Default OpenSearch connection settings
 OPENSEARCH_HOST = 'localhost'
 OPENSEARCH_PORT = 9200
-DEFAULT_NUM_DATES = 100  # Default number of random dates to sampleOPENSEARCH_USER = 'admin'
+DEFAULT_NUM_DATES = 100  # Default number of random dates to sample
+OPENSEARCH_USER = 'admin'
 OPENSEARCH_PASSWORD = 'admin'
 USE_SSL = True  # Amazon OpenSearch Service requires HTTPS
 

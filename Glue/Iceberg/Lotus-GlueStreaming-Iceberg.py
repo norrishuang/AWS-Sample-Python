@@ -31,9 +31,9 @@ from pyspark.sql import DataFrame, Row
 from pyspark.sql import SparkSession
 from awsglue import DynamicFrame
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, ArrayType, MapType, LongType
-from pyspark.sql.functions import from_json, col, to_json, json_tuple
+from pyspark.sql.functions import from_json, col, to_json, json_tuple, expr, abs as sql_abs
 from pyspark.sql.functions import current_timestamp, unix_timestamp, from_unixtime, to_date
-from pyspark.sql.functions import lit, date_format
+from pyspark.sql.functions import lit, date_format, get_json_object
 from pyspark.sql.types import TimestampType
 
 def get_secret():
@@ -132,11 +132,13 @@ if startingOffsets == "earliest" or startingOffsets == "latest":
 else:
     reader.option("startingTimestamp", startingOffsets)
 
-# create table
-# 在 job.init 之后，process_batch 之前创建表
+# Create table with updated schema to include VIN and active_timestamp fields
 try:
     creattbsql = f"""CREATE TABLE IF NOT EXISTS {CATALOG}.{DATABASE}.{TABLE_NAME} (
-      kafka_time TIMESTAMP
+      kafka_data STRING,
+      kafka_time TIMESTAMP,
+      active_timestamp BIGINT,
+      vin STRING
     )
     USING iceberg 
     PARTITIONED BY (days(kafka_time))
@@ -152,7 +154,6 @@ try:
 except Exception as e:
     print(f"Error creating table: {str(e)}")
 
-# ...
 # Load data from Kafka
 kafka_data = reader.load()
 df = kafka_data.selectExpr("CAST(value AS STRING)", "CAST(timestamp AS BIGINT)")
@@ -163,21 +164,42 @@ def process_batch(data_frame, batchId):
 
     if not data_frame.rdd.isEmpty():
         try:
-            json_schema = spark.read.json(dfc.rdd.map(lambda p: str(p["value"]))).schema
+            # Rename columns
             df_rename = dfc.withColumnRenamed("value", "kafka_data")
 
-            # 将 kafka_time 从 BIGINT 转换为 TIMESTAMP
+            # Convert kafka_time from BIGINT to TIMESTAMP
             df_with_timestamp = df_rename.withColumnRenamed("timestamp", "kafka_time") \
                 .withColumn("kafka_time", (col("kafka_time")).cast(TimestampType()))
 
-            final_df = df_with_timestamp
+            # Extract timeStamp and VIN from kafka_data JSON
+            df_with_extracted_fields = df_with_timestamp \
+                .withColumn("active_timestamp", get_json_object(col("kafka_data"), "$.timeStamp").cast("bigint")) \
+                .withColumn("vin", get_json_object(col("kafka_data"), "$.Data.VinConfig_VehVIN_Struct.VinConfig_VehVIN_Array"))
 
-            # 写入 Iceberg 表
-            final_df.writeTo(f"{CATALOG}.{DATABASE}.{TABLE_NAME}") \
-                .option("merge-schema", "true") \
-                .option("check-ordering", "false").append()
+            # Create a temporary view for the incoming data
+            df_with_extracted_fields.createOrReplaceTempView("incoming_data")
 
-            print(job_name + " - my_log - successfully wrote batch to Iceberg table")
+            # Execute merge into operation to deduplicate based on VIN and active_timestamp
+            merge_sql = f"""
+            MERGE INTO {CATALOG}.{DATABASE}.{TABLE_NAME} t
+            USING (
+              SELECT *,
+                     {sql_abs("kafka_time", "active_timestamp")} as gap,
+                     row_number() OVER (PARTITION BY vin, active_timestamp ORDER BY {sql_abs("kafka_time", "active_timestamp")}) as rn
+              FROM incoming_data
+            ) s
+            ON s.vin = t.vin AND s.active_timestamp = t.active_timestamp
+            WHEN MATCHED AND s.rn = 1 AND s.gap < t.gap THEN
+              UPDATE SET kafka_data = s.kafka_data, kafka_time = s.kafka_time, gap = s.gap
+            WHEN NOT MATCHED AND s.rn = 1 THEN
+              INSERT (kafka_data, kafka_time, active_timestamp, vin)
+              VALUES (s.kafka_data, s.kafka_time, s.active_timestamp, s.vin)
+            """
+            
+            # Execute the merge operation
+            spark.sql(merge_sql)
+
+            print(job_name + " - my_log - successfully wrote batch to Iceberg table with deduplication")
         except Exception as e:
             print(job_name + " - my_log - error processing batch: " + str(e))
             print(str(e))

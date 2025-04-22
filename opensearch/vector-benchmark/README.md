@@ -268,6 +268,7 @@ python opensearch_hybrid_search_benchmark.py --pipeline ""
 * --max-terms: 每个查询中的最大词条数（默认：8）
 * --sample-size: 用于提取词条的文档采样数量（默认：100）
 * --pipeline: 搜索管道名称（默认：nlp-search-pipeline）。使用空字符串禁用管道。
+* --num-dates: 对于随机事件条件查询，程序默认从2020-01-01，选择100天，这个参数可以指定随机的天数。
 * --debug: 启用调试模式，显示更多详细信息
 
 ## 查询示例

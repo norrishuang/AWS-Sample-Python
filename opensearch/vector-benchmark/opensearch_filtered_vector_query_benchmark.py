@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 # Default OpenSearch connection settings
 OPENSEARCH_HOST = 'localhost'
 OPENSEARCH_PORT = 9200
-OPENSEARCH_USER = 'admin'
+DEFAULT_NUM_DATES = 100  # Default number of random dates to sampleOPENSEARCH_USER = 'admin'
 OPENSEARCH_PASSWORD = 'admin'
 USE_SSL = True  # Amazon OpenSearch Service requires HTTPS
 
@@ -38,8 +38,12 @@ DEFAULT_K = 10  # Number of nearest neighbors to retrieve
 PLATFORMS = ["web", "mobile", "desktop", "api", "iot", "cloud"]
 
 # Generate a list of dates from 2020-01-01 to current date
-def generate_date_list():
-    """Generate a list of ISO formatted dates from 2020-01-01 to current date."""
+def generate_date_list(num_dates=100):
+    """Generate a list of ISO formatted dates from 2020-01-01 to current date.
+    
+    Args:
+        num_dates: Number of random dates to sample (default: 100)
+    """
     start_date = datetime(2020, 1, 1).date()
     end_date = datetime.now().date()
     
@@ -49,13 +53,13 @@ def generate_date_list():
     # Generate all dates (this could be a large list)
     all_dates = [(start_date + timedelta(days=i)).isoformat() for i in range(days_between + 1)]
     
-    # To avoid memory issues, randomly sample 100 dates from this range
-    if len(all_dates) > 100:
-        return random.sample(all_dates, 100)
+    # To avoid memory issues, randomly sample specified number of dates from this range
+    if len(all_dates) > num_dates:
+        return random.sample(all_dates, num_dates)
     return all_dates
 
 # List of dates to use for filtering
-DATE_LIST = generate_date_list()
+DATE_LIST = None  # Will be initialized in main()
 
 def create_opensearch_client(host, port, username, password):
     """Create and return an OpenSearch client."""
@@ -72,7 +76,7 @@ def create_opensearch_client(host, port, username, password):
 
 def worker_process(args):
     """Worker function to execute queries until stop flag is set."""
-    host, port, user, password, index_name, vector_dimension, k, worker_id, stop_flag, result_queue = args
+    host, port, user, password, index_name, vector_dimension, k, worker_id, stop_flag, result_queue, date_list = args
     
     # Create client for this process
     client = create_opensearch_client(host, port, user, password)
@@ -88,7 +92,7 @@ def worker_process(args):
         platform = random.choice(PLATFORMS)
         
         # Randomly select a date to filter on
-        filter_date = random.choice(DATE_LIST)
+        filter_date = random.choice(date_list)
         
         # Prepare query with script_score filter for both platform and date
         query = {
@@ -143,10 +147,10 @@ def worker_process(args):
         except Exception as e:
             print(f"Query {worker_id}-{query_id} error: {e}")
 
-def run_benchmark(host, port, user, password, index_name, vector_dimension, k, concurrency, duration_seconds):
+def run_benchmark(host, port, user, password, index_name, vector_dimension, k, concurrency, duration_seconds, date_list):
     """Run the benchmark with specified parameters."""
     print(f"Starting benchmark with {concurrency} concurrent processes for {duration_seconds} seconds...")
-    print(f"Using date range from 2020-01-01 to present with {len(DATE_LIST)} sample dates")
+    print(f"Using date range from 2020-01-01 to present with {len(date_list)} sample dates")
     
     # Setup multiprocessing manager for shared state
     manager = multiprocessing.Manager()
@@ -158,7 +162,7 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     start_time = time.time()
     
     for i in range(concurrency):
-        args = (host, port, user, password, index_name, vector_dimension, k, i, stop_flag, result_queue)
+        args = (host, port, user, password, index_name, vector_dimension, k, i, stop_flag, result_queue, date_list)
         p = multiprocessing.Process(target=worker_process, args=(args,))
         p.daemon = True  # Set as daemon so they will terminate when main process exits
         p.start()
@@ -167,7 +171,7 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     # Monitor progress
     latencies = []
     platform_stats = {platform: [] for platform in PLATFORMS}
-    date_stats = {date: [] for date in DATE_LIST}
+    date_stats = {date: [] for date in date_list}
     
     try:
         while time.time() - start_time < duration_seconds:
@@ -308,8 +312,13 @@ def main():
                         help=f'Benchmark duration in seconds (default: {DEFAULT_DURATION})')
     parser.add_argument('--k', type=int, default=DEFAULT_K,
                         help=f'Number of nearest neighbors to retrieve (default: {DEFAULT_K})')
+    parser.add_argument('--num-dates', type=int, default=DEFAULT_NUM_DATES,
+                        help=f'Number of random dates to sample for filtering (default: {DEFAULT_NUM_DATES})')
     
     args = parser.parse_args()
+    
+    # Generate date list with specified number of dates
+    date_list = generate_date_list(args.num_dates)
     
     try:
         # Create OpenSearch client for initial checks
@@ -381,7 +390,8 @@ def main():
             vector_dimension=args.dimension,
             k=args.k,
             concurrency=args.concurrency,
-            duration_seconds=args.duration
+            duration_seconds=args.duration,
+            date_list=date_list
         )
         
         if results:

@@ -180,6 +180,9 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
                 
                 latencies.append(latency)
                 platform_stats[platform].append(latency)
+                # Check if the date key exists, if not create it
+                if filter_date not in date_stats:
+                    date_stats[filter_date] = []
                 date_stats[filter_date].append(latency)
             
             elapsed = time.time() - start_time
@@ -221,6 +224,9 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
             
             latencies.append(latency)
             platform_stats[platform].append(latency)
+            # Check if the date key exists, if not create it
+            if filter_date not in date_stats:
+                date_stats[filter_date] = []
             date_stats[filter_date].append(latency)
         
         # Terminate any remaining processes

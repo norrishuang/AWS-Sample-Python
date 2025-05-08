@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: msk-log-generator-config
+data:
+  LOG_INTERVAL: "0.1"
+  MAX_LOG_SIZE: "100"
+  BACKUP_COUNT: "10"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: msk-log-generator
+  labels:
+    app: msk-log-generator
+spec:
+  replicas: 3  # 这里设置要启动的实例数量
+  selector:
+    matchLabels:
+      app: msk-log-generator
+  template:
+    metadata:
+      labels:
+        app: msk-log-generator
+    spec:
+      containers:
+      - name: msk-log-generator
+        image: 812046859005.dkr.ecr.us-east-1.amazonaws.com/msk-log-generator:latest
+        imagePullPolicy: Always
+        env:
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "b-1.kafkacluster02.iv8hyq.c8.kafka.us-east-1.amazonaws.com:9092,b-3.kafkacluster02.iv8hyq.c8.kafka.us-east-1.amazonaws.com:9092,b-2.kafkacluster02.iv8hyq.c8.kafka.us-east-1.amazonaws.com:9092"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        envFrom:
+        - configMapRef:
+            name: msk-log-generator-config
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: log-volume
+          mountPath: /app/logs
+      volumes:
+      - name: log-volume
+        emptyDir: {}

@@ -1,0 +1,43 @@
+filebeat.inputs:
+- type: filestream
+  id: lazada-logs
+  close.on_state_change.inactive: 15m
+  clean_inactive: 720h
+  ignore_older: 2h
+  buffer_size: 204800
+  message_max_bytes: 10240  # 单条日志设置最大10240个byte
+  paths:
+    - /app/server.log*
+  prospector.scanner.exclude_files: ['.gz$']
+  parsers:
+  - multiline:
+      type: pattern
+      pattern: '^\d{4}-\d{2}-\d{2}'
+      negate: true
+      match: after
+      max_lines: 1000
+  fields:
+    logs_type: cimb-lazada  # 应用英文名
+    logs_topic: lazada-logs  # kafka topic名称
+
+filebeat.registry.flush: 2s
+max_procs: 2
+fields_under_root: true
+fields:
+  server_ip: 10.3.133.68
+  subsystem: ocft-cimb-ph
+
+output.kafka:
+  hosts: [${KAFKA_BOOTSTRAP_SERVERS}]  # 不使用引号，让start.sh脚本处理
+  topic: "lazada-logs"  # 使用固定的topic名称
+  required_acks: 1
+  compression: gzip
+  max_message_bytes: 1000000
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /app/logs
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644

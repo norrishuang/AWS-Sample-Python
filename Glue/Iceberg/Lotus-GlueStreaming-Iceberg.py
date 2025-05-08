@@ -125,7 +125,8 @@ reader = spark \
     .option("kafka.security.protocol", "SASL_SSL") \
     .option("kafka.sasl.mechanism", "SCRAM-SHA-512") \
     .option("kafka.sasl.jaas.config", f'org.apache.kafka.common.security.scram.ScramLoginModule required username="{kafka_username}" password="{kafka_password}";') \
-    .option("failOnDataLoss", "false")
+    .option("failOnDataLoss", "false") \
+    .option("kafka.consumer.commit.groupid", "lotus-streaming")
 
 if startingOffsets == "earliest" or startingOffsets == "latest":
     reader.option("startingOffsets", startingOffsets)
@@ -177,29 +178,32 @@ def process_batch(data_frame, batchId):
                 .withColumn("vin", get_json_object(col("kafka_data"), "$.Data.VinConfig_VehVIN_Struct.VinConfig_VehVIN_Array"))
 
             # Create a temporary view for the incoming data
-            df_with_extracted_fields.createOrReplaceTempView("incoming_data")
+            df_with_extracted_fields.createOrReplaceGlobalTempView("incoming_data")
 
             # Execute merge into operation to deduplicate based on VIN and active_timestamp
             merge_sql = f"""
             MERGE INTO {CATALOG}.{DATABASE}.{TABLE_NAME} t
-            USING (
-              SELECT *,
-                     {sql_abs("kafka_time", "active_timestamp")} as gap,
-                     row_number() OVER (PARTITION BY vin, active_timestamp ORDER BY {sql_abs("kafka_time", "active_timestamp")}) as rn
-              FROM incoming_data
-            ) s
-            ON s.vin = t.vin AND s.active_timestamp = t.active_timestamp
-            WHEN MATCHED AND s.rn = 1 AND s.gap < t.gap THEN
-              UPDATE SET kafka_data = s.kafka_data, kafka_time = s.kafka_time, gap = s.gap
-            WHEN NOT MATCHED AND s.rn = 1 THEN
-              INSERT (kafka_data, kafka_time, active_timestamp, vin)
-              VALUES (s.kafka_data, s.kafka_time, s.active_timestamp, s.vin)
+                USING (
+                SELECT kafka_data, kafka_time, active_timestamp, vin
+                FROM (
+                    SELECT *,
+                        row_number() OVER (PARTITION BY vin, active_timestamp ORDER BY abs(unix_timestamp(kafka_time) - active_timestamp)) as rn
+                    FROM global_temp.incoming_data
+                ) WHERE rn = 1
+                ) s
+                ON s.vin = t.vin AND s.active_timestamp = t.active_timestamp
+                WHEN MATCHED THEN
+                UPDATE SET kafka_data = s.kafka_data, kafka_time = s.kafka_time
+                WHEN NOT MATCHED THEN
+                INSERT (kafka_data, kafka_time, active_timestamp, vin)
+                VALUES (s.kafka_data, s.kafka_time, s.active_timestamp, s.vin)
             """
             
             # Execute the merge operation
             spark.sql(merge_sql)
 
             print(job_name + " - my_log - successfully wrote batch to Iceberg table with deduplication")
+            spark.catalog.dropGlobalTempView("incoming_data")
         except Exception as e:
             print(job_name + " - my_log - error processing batch: " + str(e))
             print(str(e))

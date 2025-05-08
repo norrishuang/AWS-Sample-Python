@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+  msk-log-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=b-1.kafkacluster02.iv8hyq.c8.kafka.us-east-1.amazonaws.com:9092,b-3.kafkacluster02.iv8hyq.c8.kafka.us-east-1.amazonaws.com:9092,b-2.kafkacluster02.iv8hyq.c8.kafka.us-east-1.amazonaws.com:9092
+      - LOG_INTERVAL=0.1
+      - MAX_LOG_SIZE=100
+      - BACKUP_COUNT=10
+    volumes:
+      - log-data:/app/logs
+    deploy:
+      replicas: 3  # 这里设置要启动的实例数量
+
+volumes:
+  log-data:

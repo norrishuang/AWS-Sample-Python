@@ -47,6 +47,76 @@ def create_opensearch_client(host, port, username, password):
     )
     return client
 
+def warmup_knn_index(host, port, index_name, user, password, use_ssl=True, aws_auth=False, region=None):
+    """
+    Warm up the KNN index by calling the OpenSearch KNN warmup API.
+    This ensures the index is loaded into memory before benchmarking.
+    
+    Args:
+        host: OpenSearch host
+        port: OpenSearch port
+        index_name: Name of the index
+        user: OpenSearch username
+        password: OpenSearch password
+        use_ssl: Whether to use HTTPS
+        aws_auth: Whether to use AWS IAM authentication
+        region: AWS region (required for AWS auth)
+    """
+    print(f"Warming up KNN index for {index_name}...")
+    
+    try:
+        import requests
+        from requests.auth import HTTPBasicAuth
+        
+        protocol = "https" if use_ssl else "http"
+        url = f"{protocol}://{host}:{port}/_plugins/_knn/warmup/{index_name}?pretty"
+        
+        print(f"Calling KNN warmup API: {url}")
+        
+        if aws_auth:
+            try:
+                from requests_aws4auth import AWS4Auth
+                import boto3
+                
+                # Get AWS credentials
+                session = boto3.Session()
+                credentials = session.get_credentials()
+                auth = AWS4Auth(
+                    credentials.access_key,
+                    credentials.secret_key,
+                    region,
+                    'es',
+                    session_token=credentials.token
+                )
+                
+                response = requests.get(
+                    url, 
+                    auth=auth, 
+                    timeout=60,
+                    verify=False  # Skip SSL verification for development
+                )
+            except ImportError:
+                print("Warning: AWS authentication requires 'requests_aws4auth' package.")
+                print("Skipping KNN warmup.")
+                return
+        else:
+            response = requests.get(
+                url, 
+                auth=HTTPBasicAuth(user, password), 
+                timeout=60,
+                verify=False  # Skip SSL verification for development
+            )
+        
+        response.raise_for_status()  # Raise an error for HTTP issues
+        print(f"KNN warmup completed successfully: {response.text}")
+        
+    except ImportError:
+        print("Warning: 'requests' package not found. Skipping KNN warmup.")
+        print("Install with: pip install requests")
+    except Exception as e:
+        print(f"Warning: KNN warmup failed: {e}")
+        print("Continuing without warmup. This may affect initial query performance.")
+
 def fetch_all_vectors(client, index_name, sample_size=None):
     """
     Fetch all document vectors from the index for recall evaluation.
@@ -139,7 +209,7 @@ def calculate_recall(ground_truth_ids, opensearch_ids):
 
 def worker_process(args):
     """Worker function to execute queries until stop flag is set."""
-    host, port, user, password, index_name, vector_dimension, k, worker_id, stop_flag, result_queue, evaluate_recall, all_doc_ids, exact_knn = args
+    host, port, user, password, index_name, vector_dimension, k, worker_id, stop_flag, result_queue, evaluate_recall, all_doc_ids, all_vectors, exact_knn, random_queries = args
     
     # Create client for this process
     client = create_opensearch_client(host, port, user, password)
@@ -148,17 +218,26 @@ def worker_process(args):
     while not stop_flag.value:
         query_id += 1
         
-        # Generate random vector
-        vector = np.random.uniform(-1, 1, vector_dimension).tolist()
+        # For recall evaluation, use a vector from the sample set as query
+        # For performance-only testing, generate a random vector
+        if evaluate_recall and all_vectors is not None and len(all_vectors) > 0 and not random_queries:
+            # Select a random vector from the sample set
+            random_idx = np.random.randint(0, len(all_vectors))
+            vector = all_vectors[random_idx].tolist()
+            query_doc_id = all_doc_ids[random_idx]  # Remember which document this vector belongs to
+        else:
+            # Generate random vector for performance testing
+            vector = np.random.uniform(-1, 1, vector_dimension).tolist()
+            query_doc_id = None
         
         # Prepare query
         query = {
-            "size": k,
+            "size": k + 1,  # Add 1 to account for the query document itself when evaluating recall
             "query": {
                 "knn": {
                     "content_vector": {
                         "vector": vector,
-                        "k": k
+                        "k": k + 1
                     }
                 }
             }
@@ -178,10 +257,25 @@ def worker_process(args):
                 # Get OpenSearch result IDs
                 opensearch_ids = [hit['_id'] for hit in response['hits']['hits']]
                 
-                # Get ground truth nearest neighbors
-                vector_np = np.array(vector).reshape(1, -1)
-                _, indices = exact_knn.kneighbors(vector_np, n_neighbors=k)
-                ground_truth_ids = all_doc_ids[indices[0]]
+                if query_doc_id is not None:
+                    # Remove the query document from results if it's from the sample set
+                    opensearch_ids = [doc_id for doc_id in opensearch_ids if doc_id != query_doc_id]
+                
+                opensearch_ids = opensearch_ids[:k]  # Limit to k results
+                
+                if random_queries:
+                    # For random queries, compare against exact KNN on the sample set
+                    vector_np = np.array(vector).reshape(1, -1)
+                    _, indices = exact_knn.kneighbors(vector_np, n_neighbors=k)
+                    ground_truth_ids = all_doc_ids[indices[0]]
+                else:
+                    # For sample set queries, get ground truth by excluding the query document
+                    vector_np = np.array(vector).reshape(1, -1)
+                    _, indices = exact_knn.kneighbors(vector_np, n_neighbors=k+1)  # +1 to account for self
+                    
+                    # Filter out the query document from ground truth
+                    ground_truth_indices = [idx for idx in indices[0] if all_doc_ids[idx] != query_doc_id][:k]
+                    ground_truth_ids = all_doc_ids[ground_truth_indices]
                 
                 # Calculate recall
                 recall = calculate_recall(ground_truth_ids, opensearch_ids)
@@ -192,9 +286,12 @@ def worker_process(args):
         except Exception as e:
             print(f"Query {worker_id}-{query_id} error: {e}")
 
-def run_benchmark(host, port, user, password, index_name, vector_dimension, k, concurrency, duration_seconds, evaluate_recall=False, recall_sample_size=None):
+def run_benchmark(host, port, user, password, index_name, vector_dimension, k, concurrency, duration_seconds, evaluate_recall=False, recall_sample_size=None, random_queries=False, aws_auth=False, region=None):
     """Run the benchmark with specified parameters."""
     print(f"Starting benchmark with {concurrency} concurrent processes for {duration_seconds} seconds...")
+    
+    # Warm up the KNN index before benchmarking
+    warmup_knn_index(host, port, index_name, user, password, USE_SSL, aws_auth, region)
     
     # Setup multiprocessing manager for shared state
     manager = multiprocessing.Manager()
@@ -203,6 +300,7 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     
     # Initialize recall evaluation data if needed
     all_doc_ids = None
+    all_vectors = None
     exact_knn = None
     
     if evaluate_recall:
@@ -213,10 +311,19 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
             # Fetch document vectors
             all_doc_ids, all_vectors = fetch_all_vectors(client, index_name, recall_sample_size)
             
-            # Build exact KNN index
-            exact_knn = build_exact_knn_index(all_vectors)
-            
-            print(f"Recall evaluation prepared with {len(all_doc_ids)} documents")
+            if len(all_vectors) < k + 1:
+                print(f"Warning: Sample size ({len(all_vectors)}) is too small for k={k}. Need at least k+1 documents.")
+                print("Continuing without recall evaluation")
+                evaluate_recall = False
+            else:
+                # Build exact KNN index
+                exact_knn = build_exact_knn_index(all_vectors)
+                
+                print(f"Recall evaluation prepared with {len(all_doc_ids)} documents")
+                if not random_queries:
+                    print("Using vectors from the sample set as query vectors for accurate recall evaluation")
+                else:
+                    print("Using random vectors for queries (note: this may result in artificially low recall)")
         except Exception as e:
             print(f"Error preparing recall evaluation: {e}")
             print("Continuing without recall evaluation")
@@ -227,7 +334,7 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     start_time = time.time()
     
     for i in range(concurrency):
-        args = (host, port, user, password, index_name, vector_dimension, k, i, stop_flag, result_queue, evaluate_recall, all_doc_ids, exact_knn)
+        args = (host, port, user, password, index_name, vector_dimension, k, i, stop_flag, result_queue, evaluate_recall, all_doc_ids, all_vectors, exact_knn, random_queries)
         p = multiprocessing.Process(target=worker_process, args=(args,))
         p.daemon = True  # Set as daemon so they will terminate when main process exits
         p.start()
@@ -367,6 +474,10 @@ def main():
                         help='Evaluate recall by comparing with exact nearest neighbors')
     parser.add_argument('--recall-sample', type=int, default=DEFAULT_RECALL_SAMPLE,
                         help=f'Number of documents to sample for recall evaluation (default: {DEFAULT_RECALL_SAMPLE})')
+    parser.add_argument('--random-queries', action='store_true',
+                        help='Use random vectors for queries instead of vectors from the sample set (not recommended for recall evaluation)')
+    parser.add_argument('--skip-warmup', action='store_true',
+                        help='Skip the KNN index warmup step before benchmarking')
     
     args = parser.parse_args()
     
@@ -435,10 +546,28 @@ def main():
             try:
                 import sklearn
                 print("Recall evaluation enabled. This will require additional memory to store document vectors.")
+                
+                if args.random_queries:
+                    print("WARNING: Using random query vectors with recall evaluation will produce inaccurate results.")
+                    print("The recall will be artificially low because the ground truth is based on the sample set.")
+                    print("Consider removing the --random-queries flag for accurate recall evaluation.")
             except ImportError:
                 print("Error: Recall evaluation requires scikit-learn package.")
                 print("Please install it with: pip install scikit-learn")
                 return
+        
+        # Warm up the KNN index if not skipped
+        if not args.skip_warmup:
+            warmup_knn_index(
+                host=args.host,
+                port=args.port,
+                index_name=args.index,
+                user=args.user,
+                password=args.password,
+                use_ssl=USE_SSL,
+                aws_auth=args.aws_auth,
+                region=args.region
+            )
         
         # Run benchmark
         results = run_benchmark(
@@ -452,8 +581,63 @@ def main():
             concurrency=args.concurrency,
             duration_seconds=args.duration,
             evaluate_recall=args.evaluate_recall,
-            recall_sample_size=args.recall_sample
+            recall_sample_size=args.recall_sample,
+            random_queries=args.random_queries,
+            aws_auth=args.aws_auth,
+            region=args.region
         )
+        
+        if results:
+            # Print results
+            print("\n\n" + "="*50)
+            print("BENCHMARK RESULTS")
+            print("="*50)
+            print(f"Total queries: {results['queries']}")
+            print(f"Duration: {results['duration_seconds']:.2f} seconds")
+            print(f"QPS (queries per second): {results['qps']:.2f}")
+            print("\nLatency Statistics (milliseconds):")
+            print(f"  Min: {results['latency']['min']:.2f} ms")
+            print(f"  Mean: {results['latency']['mean']:.2f} ms")
+            print(f"  P50: {results['latency']['p50']:.2f} ms")
+            print(f"  P90: {results['latency']['p90']:.2f} ms")
+            print(f"  P95: {results['latency']['p95']:.2f} ms")
+            print(f"  P99: {results['latency']['p99']:.2f} ms")
+            print(f"  Max: {results['latency']['max']:.2f} ms")
+            
+            # Print recall statistics if available
+            if 'recall' in results:
+                print("\nRecall@{} Statistics:".format(args.k))
+                print(f"  Min: {results['recall']['min']:.4f}")
+                print(f"  Mean: {results['recall']['mean']:.4f}")
+                print(f"  P50: {results['recall']['p50']:.4f}")
+                print(f"  P90: {results['recall']['p90']:.4f}")
+                print(f"  P95: {results['recall']['p95']:.4f}")
+                print(f"  P99: {results['recall']['p99']:.4f}")
+                print(f"  Max: {results['recall']['max']:.4f}")
+                
+                if args.random_queries and args.evaluate_recall:
+                    print("\nNOTE: Recall was evaluated using random query vectors against a sample set.")
+                    print("This approach may not accurately represent true recall performance.")
+                    print("For more accurate recall evaluation, run without the --random-queries flag.")
+                else:
+                    print("\nNOTE: Recall was evaluated using vectors from the sample set as queries,")
+                    print("which provides a more accurate assessment of the ANN algorithm's performance.")
+            
+            print("="*50)
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+
+if __name__ == "__main__":
+    # Set start method for multiprocessing
+    try:
+        multiprocessing.set_start_method('spawn')
+    except RuntimeError:
+        # Method already set
+        pass
+    main()
         
         if results:
             # Print results

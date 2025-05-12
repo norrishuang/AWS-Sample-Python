@@ -213,6 +213,33 @@ def bulk_index_documents(client, num_docs, index_name, batch_size=100, dimension
     print(f"Indexing complete. Total: {total_success} succeeded, {total_failed} failed")
     return total_success, total_failed
 
+def force_merge_index(client, index_name, max_num_segments=5):
+    """Force merge the index to optimize segment count.
+    
+    Args:
+        client: OpenSearch client
+        index_name: Name of the index to merge
+        max_num_segments: Maximum number of segments to merge to
+    
+    Returns:
+        Response from the force merge operation
+    """
+    print(f"Starting force merge on index {index_name} to {max_num_segments} segments...")
+    print("This operation may take a long time. Please be patient.")
+    
+    try:
+        # Force merge with a 6-hour timeout (21600000 milliseconds)
+        response = client.indices.forcemerge(
+            index=index_name, 
+            max_num_segments=max_num_segments, 
+            request_timeout=21600000  # 6 hours in milliseconds
+        )
+        print(f"Force merge completed successfully: {response}")
+        return response
+    except Exception as e:
+        print(f"Error during force merge: {e}")
+        return None
+
 def main():
     """Main function to parse arguments and execute the script."""
     parser = argparse.ArgumentParser(description='Generate and index random data into OpenSearch')
@@ -244,6 +271,10 @@ def main():
                         help='Number of primary shards for the index (default: 12)')
     parser.add_argument('--replicas', type=int, default=1,
                         help='Number of replica shards for the index (default: 1)')
+    parser.add_argument('--force-merge', action='store_true',
+                        help='Force merge the index after indexing to optimize segment count')
+    parser.add_argument('--max-segments', type=int, default=5,
+                        help='Maximum number of segments to merge to when using force-merge (default: 5)')
     
     args = parser.parse_args()
     
@@ -309,6 +340,10 @@ def main():
                             args.dimension, args.min_sparse_terms, args.max_sparse_terms)
         
         print(f"Completed indexing {args.num_docs} documents to {args.index}")
+        
+        # Force merge the index if requested
+        if args.force_merge:
+            force_merge_index(client, args.index, args.max_segments)
         
     except Exception as e:
         print(f"Error: {e}")

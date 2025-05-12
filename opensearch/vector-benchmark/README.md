@@ -27,17 +27,12 @@
 ### 安装依赖
 
 ```bash
-pip install opensearch-py numpy faker
+pip install opensearch-py numpy faker scikit-learn
 ```
 
 如果使用AWS IAM认证，还需要安装：
 ```bash
 pip install requests_aws4auth boto3
-```
-
-计算 Recall 需要
-```bash
-pip install scikit-learn
 ```
 
 ### 连接到Amazon OpenSearch Service

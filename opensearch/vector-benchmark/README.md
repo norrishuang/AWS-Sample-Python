@@ -35,6 +35,11 @@ pip install opensearch-py numpy faker
 pip install requests_aws4auth boto3
 ```
 
+计算 Recall 需要
+```bash
+pip install scikit-learn
+```
+
 ### 连接到Amazon OpenSearch Service
 
 ```bash

@@ -4,6 +4,7 @@ OpenSearch Vector Query Benchmark
 
 This script performs concurrent vector search queries against OpenSearch
 using process-based parallelism and collects performance metrics including QPS and latency percentiles.
+It also supports evaluating recall by comparing OpenSearch results with exact nearest neighbors.
 """
 
 import argparse
@@ -16,6 +17,7 @@ from collections import deque
 from opensearchpy import OpenSearch, RequestsHttpConnection
 import sys
 import os
+from sklearn.neighbors import NearestNeighbors
 
 # Default OpenSearch connection settings
 OPENSEARCH_HOST = 'localhost'
@@ -30,6 +32,7 @@ VECTOR_DIMENSION = 1536
 DEFAULT_CONCURRENCY = 4  # Default to 4 processes
 DEFAULT_DURATION = 60  # seconds
 DEFAULT_K = 10  # Number of nearest neighbors to retrieve
+DEFAULT_RECALL_SAMPLE = 1000  # Number of documents to sample for recall evaluation
 
 def create_opensearch_client(host, port, username, password):
     """Create and return an OpenSearch client."""
@@ -44,9 +47,99 @@ def create_opensearch_client(host, port, username, password):
     )
     return client
 
+def fetch_all_vectors(client, index_name, sample_size=None):
+    """
+    Fetch all document vectors from the index for recall evaluation.
+    
+    Args:
+        client: OpenSearch client
+        index_name: Name of the index
+        sample_size: Number of documents to sample (None for all)
+    
+    Returns:
+        Tuple of (document_ids, vectors)
+    """
+    print(f"Fetching vectors from index {index_name} for recall evaluation...")
+    
+    # First, get the total count of documents
+    count_response = client.count(index=index_name)
+    total_docs = count_response['count']
+    
+    if sample_size and sample_size < total_docs:
+        print(f"Sampling {sample_size} documents out of {total_docs} total documents")
+        size = sample_size
+    else:
+        print(f"Fetching all {total_docs} documents")
+        size = total_docs
+    
+    # Fetch documents with their vectors
+    query = {
+        "size": size,
+        "_source": ["content_vector"],
+        "query": {
+            "match_all": {}
+        }
+    }
+    
+    response = client.search(
+        body=query,
+        index=index_name
+    )
+    
+    # Extract document IDs and vectors
+    doc_ids = []
+    vectors = []
+    
+    for hit in response['hits']['hits']:
+        doc_ids.append(hit['_id'])
+        vectors.append(hit['_source']['content_vector'])
+    
+    print(f"Successfully fetched {len(vectors)} document vectors")
+    return np.array(doc_ids), np.array(vectors)
+
+def build_exact_knn_index(vectors):
+    """
+    Build an exact KNN index using scikit-learn for ground truth.
+    
+    Args:
+        vectors: Document vectors
+    
+    Returns:
+        Fitted NearestNeighbors model
+    """
+    print("Building exact KNN index for ground truth...")
+    # Use cosine similarity (inner product for normalized vectors)
+    knn = NearestNeighbors(algorithm='brute', metric='cosine')
+    knn.fit(vectors)
+    return knn
+
+def calculate_recall(ground_truth_ids, opensearch_ids):
+    """
+    Calculate recall@k by comparing OpenSearch results with ground truth.
+    
+    Args:
+        ground_truth_ids: List of document IDs from exact KNN
+        opensearch_ids: List of document IDs from OpenSearch
+    
+    Returns:
+        Recall value (0.0 to 1.0)
+    """
+    # Convert to sets for intersection
+    ground_truth_set = set(ground_truth_ids)
+    opensearch_set = set(opensearch_ids)
+    
+    # Calculate recall
+    if not ground_truth_set:
+        return 0.0
+    
+    intersection = ground_truth_set.intersection(opensearch_set)
+    recall = len(intersection) / len(ground_truth_set)
+    
+    return recall
+
 def worker_process(args):
     """Worker function to execute queries until stop flag is set."""
-    host, port, user, password, index_name, vector_dimension, k, worker_id, stop_flag, result_queue = args
+    host, port, user, password, index_name, vector_dimension, k, worker_id, stop_flag, result_queue, evaluate_recall, all_doc_ids, exact_knn = args
     
     # Create client for this process
     client = create_opensearch_client(host, port, user, password)
@@ -79,13 +172,27 @@ def worker_process(args):
             # Extract the took field (in milliseconds)
             took_ms = response.get('took', 0)
             
+            # Calculate recall if enabled
+            recall = None
+            if evaluate_recall and exact_knn is not None:
+                # Get OpenSearch result IDs
+                opensearch_ids = [hit['_id'] for hit in response['hits']['hits']]
+                
+                # Get ground truth nearest neighbors
+                vector_np = np.array(vector).reshape(1, -1)
+                _, indices = exact_knn.kneighbors(vector_np, n_neighbors=k)
+                ground_truth_ids = all_doc_ids[indices[0]]
+                
+                # Calculate recall
+                recall = calculate_recall(ground_truth_ids, opensearch_ids)
+            
             # Put result in queue
-            result_queue.put(took_ms)
+            result_queue.put((took_ms, recall))
                 
         except Exception as e:
             print(f"Query {worker_id}-{query_id} error: {e}")
 
-def run_benchmark(host, port, user, password, index_name, vector_dimension, k, concurrency, duration_seconds):
+def run_benchmark(host, port, user, password, index_name, vector_dimension, k, concurrency, duration_seconds, evaluate_recall=False, recall_sample_size=None):
     """Run the benchmark with specified parameters."""
     print(f"Starting benchmark with {concurrency} concurrent processes for {duration_seconds} seconds...")
     
@@ -94,12 +201,33 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     result_queue = manager.Queue()
     stop_flag = manager.Value('b', False)
     
+    # Initialize recall evaluation data if needed
+    all_doc_ids = None
+    exact_knn = None
+    
+    if evaluate_recall:
+        try:
+            # Create client for fetching vectors
+            client = create_opensearch_client(host, port, user, password)
+            
+            # Fetch document vectors
+            all_doc_ids, all_vectors = fetch_all_vectors(client, index_name, recall_sample_size)
+            
+            # Build exact KNN index
+            exact_knn = build_exact_knn_index(all_vectors)
+            
+            print(f"Recall evaluation prepared with {len(all_doc_ids)} documents")
+        except Exception as e:
+            print(f"Error preparing recall evaluation: {e}")
+            print("Continuing without recall evaluation")
+            evaluate_recall = False
+    
     # Start worker processes
     processes = []
     start_time = time.time()
     
     for i in range(concurrency):
-        args = (host, port, user, password, index_name, vector_dimension, k, i, stop_flag, result_queue)
+        args = (host, port, user, password, index_name, vector_dimension, k, i, stop_flag, result_queue, evaluate_recall, all_doc_ids, exact_knn)
         p = multiprocessing.Process(target=worker_process, args=(args,))
         p.daemon = True  # Set as daemon so they will terminate when main process exits
         p.start()
@@ -107,12 +235,16 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     
     # Monitor progress
     latencies = []
+    recalls = []
     try:
         while time.time() - start_time < duration_seconds:
             # Collect results from queue
             while not result_queue.empty():
-                latency = result_queue.get_nowait()
+                result = result_queue.get_nowait()
+                latency, recall = result
                 latencies.append(latency)
+                if recall is not None:
+                    recalls.append(recall)
             
             elapsed = time.time() - start_time
             current_qps = len(latencies) / elapsed if elapsed > 0 else 0
@@ -127,12 +259,20 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
                 p50 = 0
                 p99 = 0
             
+            # Calculate current recall if available
+            avg_recall = sum(recalls) / len(recalls) if recalls else 0
+            
             # Print progress update
-            sys.stdout.write(f"\rRunning: {elapsed:.1f}s | "
-                            f"Queries: {len(latencies)} | "
-                            f"QPS: {current_qps:.1f} | "
-                            f"P50: {p50:.1f}ms | "
-                            f"P99: {p99:.1f}ms")
+            status_line = f"\rRunning: {elapsed:.1f}s | " \
+                          f"Queries: {len(latencies)} | " \
+                          f"QPS: {current_qps:.1f} | " \
+                          f"P50: {p50:.1f}ms | " \
+                          f"P99: {p99:.1f}ms"
+            
+            if evaluate_recall:
+                status_line += f" | Avg Recall@{k}: {avg_recall:.4f}"
+                
+            sys.stdout.write(status_line)
             sys.stdout.flush()
             
             time.sleep(1)
@@ -146,8 +286,11 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
         
         # Collect any remaining results
         while not result_queue.empty():
-            latency = result_queue.get_nowait()
+            result = result_queue.get_nowait()
+            latency, recall = result
             latencies.append(latency)
+            if recall is not None:
+                recalls.append(recall)
         
         # Terminate any remaining processes
         for p in processes:
@@ -181,6 +324,18 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
         }
     }
     
+    # Add recall statistics if available
+    if recalls:
+        stats["recall"] = {
+            "min": min(recalls),
+            "max": max(recalls),
+            "mean": statistics.mean(recalls),
+            "p50": sorted(recalls)[len(recalls) // 2],
+            "p90": sorted(recalls)[int(len(recalls) * 0.9)],
+            "p95": sorted(recalls)[int(len(recalls) * 0.95)],
+            "p99": sorted(recalls)[int(len(recalls) * 0.99)]
+        }
+    
     return stats
 
 def main():
@@ -208,6 +363,10 @@ def main():
                         help=f'Benchmark duration in seconds (default: {DEFAULT_DURATION})')
     parser.add_argument('--k', type=int, default=DEFAULT_K,
                         help=f'Number of nearest neighbors to retrieve (default: {DEFAULT_K})')
+    parser.add_argument('--evaluate-recall', action='store_true',
+                        help='Evaluate recall by comparing with exact nearest neighbors')
+    parser.add_argument('--recall-sample', type=int, default=DEFAULT_RECALL_SAMPLE,
+                        help=f'Number of documents to sample for recall evaluation (default: {DEFAULT_RECALL_SAMPLE})')
     
     args = parser.parse_args()
     
@@ -271,6 +430,16 @@ def main():
             print("Please create the index first using opensearch_vector_benchmark.py")
             return
         
+        # Check if scikit-learn is installed when recall evaluation is requested
+        if args.evaluate_recall:
+            try:
+                import sklearn
+                print("Recall evaluation enabled. This will require additional memory to store document vectors.")
+            except ImportError:
+                print("Error: Recall evaluation requires scikit-learn package.")
+                print("Please install it with: pip install scikit-learn")
+                return
+        
         # Run benchmark
         results = run_benchmark(
             host=args.host,
@@ -281,7 +450,9 @@ def main():
             vector_dimension=args.dimension,
             k=args.k,
             concurrency=args.concurrency,
-            duration_seconds=args.duration
+            duration_seconds=args.duration,
+            evaluate_recall=args.evaluate_recall,
+            recall_sample_size=args.recall_sample
         )
         
         if results:
@@ -300,6 +471,18 @@ def main():
             print(f"  P95: {results['latency']['p95']:.2f} ms")
             print(f"  P99: {results['latency']['p99']:.2f} ms")
             print(f"  Max: {results['latency']['max']:.2f} ms")
+            
+            # Print recall statistics if available
+            if 'recall' in results:
+                print("\nRecall@{} Statistics:".format(args.k))
+                print(f"  Min: {results['recall']['min']:.4f}")
+                print(f"  Mean: {results['recall']['mean']:.4f}")
+                print(f"  P50: {results['recall']['p50']:.4f}")
+                print(f"  P90: {results['recall']['p90']:.4f}")
+                print(f"  P95: {results['recall']['p95']:.4f}")
+                print(f"  P99: {results['recall']['p99']:.4f}")
+                print(f"  Max: {results['recall']['max']:.4f}")
+            
             print("="*50)
         
     except Exception as e:

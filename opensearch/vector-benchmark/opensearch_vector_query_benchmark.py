@@ -258,6 +258,13 @@ def calculate_recall(ground_truth_ids, opensearch_ids):
     intersection = ground_truth_set.intersection(opensearch_set)
     recall = len(intersection) / len(ground_truth_set)
     
+    # Debug output to help diagnose recall issues
+    print(f"\nDEBUG - Recall calculation:")
+    print(f"  Ground truth IDs: {ground_truth_ids[:5]}... (total: {len(ground_truth_ids)})")
+    print(f"  OpenSearch IDs: {opensearch_ids[:5]}... (total: {len(opensearch_ids)})")
+    print(f"  Intersection size: {len(intersection)}")
+    print(f"  Recall: {recall:.4f}")
+    
     return recall
 
 def worker_process(args):
@@ -458,7 +465,7 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
                           f"P99: {p99:.1f}ms"
             
             if evaluate_recall:
-                status_line += f" | Avg Recall@{k}: {avg_recall:.4f}"
+                status_line += f" | Recall@{k}: {avg_recall:.4f}"
                 
             sys.stdout.write(status_line)
             sys.stdout.flush()
@@ -514,15 +521,11 @@ def run_benchmark(host, port, user, password, index_name, vector_dimension, k, c
     
     # Add recall statistics if available
     if recalls:
-        stats["recall"] = {
-            "min": min(recalls),
-            "max": max(recalls),
-            "mean": statistics.mean(recalls),
-            "p50": sorted(recalls)[len(recalls) // 2],
-            "p90": sorted(recalls)[int(len(recalls) * 0.9)],
-            "p95": sorted(recalls)[int(len(recalls) * 0.95)],
-            "p99": sorted(recalls)[int(len(recalls) * 0.99)]
-        }
+        # Calculate overall recall (average of all individual recalls)
+        overall_recall = statistics.mean(recalls)
+        stats["recall"] = overall_recall
+    else:
+        stats["recall"] = 0.0
     
     return stats
 
@@ -700,13 +703,7 @@ def main():
             # Print recall statistics if available
             if 'recall' in results:
                 print("\nRecall@{} Statistics:".format(args.k))
-                print(f"  Min: {results['recall']['min']:.4f}")
-                print(f"  Mean: {results['recall']['mean']:.4f}")
-                print(f"  P50: {results['recall']['p50']:.4f}")
-                print(f"  P90: {results['recall']['p90']:.4f}")
-                print(f"  P95: {results['recall']['p95']:.4f}")
-                print(f"  P99: {results['recall']['p99']:.4f}")
-                print(f"  Max: {results['recall']['max']:.4f}")
+                print(f"  Overall Recall: {results['recall']:.4f}")
                 
                 if args.random_queries and args.evaluate_recall:
                     print("\nNOTE: Recall was evaluated using random query vectors against a sample set.")

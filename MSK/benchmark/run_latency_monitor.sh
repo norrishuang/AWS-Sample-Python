@@ -1,5 +1,12 @@
 #!/bin/bash
 
+#
+# Copyright (c) 2025 xiohuang
+#
+# This software is released under the MIT License.
+# https://opensource.org/licenses/MIT
+#
+
 # 设置默认参数
 TOPIC=${1:-"lazada-logs"}
 BOOTSTRAP_SERVERS=${2:-"localhost:9092"}
@@ -15,7 +22,7 @@ python kafka_latency_monitor_improved.py \
   -t "$TOPIC" \
   -b "$BOOTSTRAP_SERVERS" \
   -g "$GROUP_ID" \
-  -bs 100 \
+  -bs 1000 \
   -pt 1.0 \
   -i 5 \
   -k
